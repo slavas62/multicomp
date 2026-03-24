@@ -1,0 +1,13 @@
+<!-- multicomp/templates/upload.html -->
+
+<!DOCTYPE html>
+<html>
+<body>
+    <h2>Загрузка файла</h2>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Отправить на сервер</button>
+    </form>
+</body>
+</html>
