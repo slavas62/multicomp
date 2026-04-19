@@ -38,8 +38,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'easy_thumbnails', # приложение нужно для FILER
+#    'filer',
+    'config.filer_config.FilerConfig', # добавляем приложение FILER с изхмененной конфигурацией в config/filer_config.py и названиями в mcbuilder/admin.py
+    'mptt', # приложение нужно для FILER
     'mcmethod',
-    'mcbuilder'
+    'mcbuilder',
 ]
 
 MIDDLEWARE = [
@@ -57,7 +61,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'templates')],
+        'DIRS': [os.path.join(BASE_DIR, 'templates')], # Добавляем для указания местоположения шаблонов HTML в проекте
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [

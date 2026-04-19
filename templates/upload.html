@@ -7,7 +7,9 @@
     <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
         {{ form.as_p }}
-        <button type="submit">Отправить на сервер</button>
+<!--         <input type="file" name="file" multiple>
+        <button type="submit">Загрузить всё</button> -->
+       <button type="submit">Отправить на сервер</button>
     </form>
 </body>
 </html>

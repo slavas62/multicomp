@@ -4,4 +4,4 @@ from .models import Mcbuilder
 class McbuilderForm(forms.ModelForm):
     class Meta:
         model = Mcbuilder
-        fields = ('name', 'mcfile', 'file', 'method', 'description',)
+        fields = ('name', 'mcfile', 'files_folder', 'method', 'description',)

@@ -7,7 +7,7 @@ def model_form_upload(request):
         form = McbuilderForm(request.POST, request.FILES) # Обязательно request.FILES
         if form.is_valid():
             form.save()
-            return redirect('home')
+            return redirect('/admin/mcbuilder/mcbuilder/')
     else:
         form = McbuilderForm()
     return render(request, 'upload.html', {'form': form})
