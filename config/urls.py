@@ -22,7 +22,7 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('mcbuilder/', include('mcbuilder.urls')), # Все ссылки из myapp теперь начинаются с /mcbuilder/
+    path('mcbuilder/', include('mcbuilder.urls')), # Все ссылки из приложения mcbuilder теперь начинаются с /mcbuilder/
     path('filer/', include('filer.urls')), # Ссылки приложения FILER начинаются с /filer/
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
