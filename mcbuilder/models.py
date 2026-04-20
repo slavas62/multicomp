@@ -7,7 +7,7 @@ from filer.fields.folder import FilerFolderField
 # Create your models here.
 class Mcbuilder(models.Model):
     name = models.CharField(u'Название', max_length=50, help_text=u'название мультивременного композита')
-    mcfile = models.CharField(u'Имя файла', max_length=20, help_text=u'англоязычное имя выходного файла')
+    mcfile = models.CharField(u'Имя композита', max_length=20, help_text=u'англоязычное имя выходного файла')
 #    file = models.FileField(u'Имя файла', upload_to='files/%Y%m%d/', null=True, blank=True)
     files_folder = FilerFolderField(
         null=True,           # Разрешить отсутствие выбора
@@ -19,10 +19,11 @@ class Mcbuilder(models.Model):
     date_created = models.DateTimeField(u'Дата создания', auto_now_add=True, help_text=u'дата создания выходного файла')
     method = models.ForeignKey(Mcmethod, verbose_name =u'Методы МВК', on_delete=models.PROTECT)
     description = models.TextField(u'Описание', null=True, blank=True, help_text=u'описание результата')
+    builded = models.BooleanField(u'Выполнено', default=False, help_text=u'композит успешно создан')
    
     class Meta:
-        verbose_name = u'cервис создания МВК'
-        verbose_name_plural = u'cервис создания МВК'
+        verbose_name = u'параметры создания МВК'
+        verbose_name_plural = u'параметры создания МВК'
  
     def __str__(self):
         return self.name        

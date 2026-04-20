@@ -38,10 +38,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'easy_thumbnails', # приложение нужно для FILER
 #    'filer',
-    'config.filer_config.FilerConfig', # добавляем приложение FILER с изхмененной конфигурацией в config/filer_config.py и названиями в mcbuilder/admin.py
+    'easy_thumbnails', # приложение нужно для FILER
     'mptt', # приложение нужно для FILER
+    'config.filer_config.FilerConfig', # добавляем приложение FILER с изхмененной конфигурацией в config/filer_config.py и названиями в mcbuilder/admin.py
     'mcmethod',
     'mcbuilder',
 ]
