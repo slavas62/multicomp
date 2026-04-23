@@ -15,14 +15,13 @@ class McbuilderConfig(AppConfig):
         # Пример создания медианного композита
         input_files = get_filenames_by_folder_name(obj.files_folder)
         print(f'Исходные файлы из папки {obj.files_folder}: {input_files}')
-
-        output_file = obj.files_folder.name + '_' + obj.mcfile + '.tif'  # "{имя папки}_median_composite.tif"  # Файл результата
+        output_file = obj.files_folder.name + '_' + obj.mcfile + '.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
         print(f'Имя результирующего файла: {output_file}')
 
-        if obj.method.name == 'Медианный композит':
-            create_median_composite(input_files, output_file)   # Создание медианного композита из нескольких разновременных снимков
+        if obj.method.name == 'Медианный композит':          # Создание медианного композита из нескольких разновременных снимков
+            create_median_composite(input_files, output_file)
 
-        if obj.method.name == 'Синтезированный композит':
+        if obj.method.name == 'Синтезированный композит':    # Создание синтезированного композита из двух разновременных снимков
         # Пример использования:
         # Берём канал 3 из первого файла (красный)
         # и каналы 2,1 из второго файла (зелёный и синий)
