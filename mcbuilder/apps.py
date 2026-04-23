@@ -16,14 +16,24 @@ class McbuilderConfig(AppConfig):
         input_files = get_filenames_by_folder_name(obj.files_folder)
         print(f'Исходные файлы из папки {obj.files_folder}: {input_files}')
 
-        output_file = obj.mcfile  # "median_composite.tif"  # Файл результата
+        output_file = obj.files_folder.name + '_' + obj.mcfile + '.tif'  # "{имя папки}_median_composite.tif"  # Файл результата
         print(f'Имя результирующего файла: {output_file}')
 
-        create_median_composite(input_files, output_file)   # Создание медианного композита из нескольких разновременных снимков
+        if obj.method.name == 'Медианный композит':
+            create_median_composite(input_files, output_file)   # Создание медианного композита из нескольких разновременных снимков
+
+        if obj.method.name == 'Синтезированный композит':
+        # Пример использования:
+        # Берём канал 3 из первого файла (красный)
+        # и каналы 2,1 из второго файла (зелёный и синий)
+            composite_from_bands(
+                path1=input_files[0], bands1=[3],
+                path2=input_files[1], bands2=[2, 1],
+                out_path=output_file
+            )
 
         obj.builded = True
         return obj.builded
-
 
 def get_filenames_by_folder_name(folder):
     try:
@@ -39,6 +49,76 @@ def get_filenames_by_folder_name(folder):
         return filenames
     except folder.DoesNotExist:
         return []
+
+# Синтезированный композит по трем каналам из разных снимков
+def composite_from_bands(path1, bands1, path2, bands2, out_path, driver_name='GTiff'):
+    """
+    Создаёт мультиканальный растр, объединяя указанные каналы из двух разных файлов.
+
+    Параметры:
+        path1 (str): путь к первому растру
+        bands1 (list[int]): список индексов каналов (1-базированная индексация) из первого растра
+        path2 (str): путь ко второму растру
+        bands2 (list[int]): список индексов каналов из второго растра
+        out_path (str): путь для сохранения результата
+        driver_name (str): драйвер GDAL (по умолчанию 'GTiff')
+    """
+    # Открываем исходные растры
+    ds1 = gdal.Open(path1)
+    ds2 = gdal.Open(path2)
+
+    if ds1 is None or ds2 is None:
+        raise RuntimeError("Не удалось открыть один из файлов")
+
+    # Проверяем совпадение размеров, проекции и геотрансформации
+    if ds1.RasterXSize != ds2.RasterXSize or ds1.RasterYSize != ds2.RasterYSize:
+        raise ValueError("Размеры растров не совпадают")
+    if ds1.GetProjection() != ds2.GetProjection():
+        raise ValueError("Проекции растров не совпадают")
+    geotransform = ds1.GetGeoTransform()
+    if geotransform != ds2.GetGeoTransform():
+        print("Предупреждение: геотрансформации различаются, будет использована трансформация первого файла")
+
+    # Определяем количество каналов в выходном растре
+    num_bands = len(bands1) + len(bands2)
+    # Тип данных – берем из первого указанного канала (можно улучшить)
+    sample_band = ds1.GetRasterBand(bands1[0])
+    data_type = sample_band.DataType
+
+    # Создаём выходной растр
+    driver = gdal.GetDriverByName(driver_name)
+    out_ds = driver.Create(out_path, ds1.RasterXSize, ds1.RasterYSize, num_bands, data_type)
+    out_ds.SetProjection(ds1.GetProjection())
+    out_ds.SetGeoTransform(geotransform)
+
+    # Последовательная запись каналов из первого файла
+    for out_idx, band_idx in enumerate(bands1, start=1):
+        src_band = ds1.GetRasterBand(band_idx)
+        data = src_band.ReadAsArray()
+        out_band = out_ds.GetRasterBand(out_idx)
+        out_band.WriteArray(data)
+        # Копируем настройки NoData, если есть
+        src_nodata = src_band.GetNoDataValue()
+        if src_nodata is not None:
+            out_band.SetNoDataValue(src_nodata)
+
+    # Запись каналов из второго файла (продолжаем нумерацию)
+    offset = len(bands1)
+    for out_idx, band_idx in enumerate(bands2, start=1 + offset):
+        src_band = ds2.GetRasterBand(band_idx)
+        data = src_band.ReadAsArray()
+        out_band = out_ds.GetRasterBand(out_idx)
+        out_band.WriteArray(data)
+        src_nodata = src_band.GetNoDataValue()
+        if src_nodata is not None:
+            out_band.SetNoDataValue(src_nodata)
+
+    # Закрываем все датасеты
+    ds1 = None
+    ds2 = None
+    out_ds = None
+
+    print(f"Синтезированный растр сохранён: {out_path}")
 
 
 def create_median_composite(input_files, output_file):
@@ -88,7 +168,7 @@ def create_median_composite(input_files, output_file):
         composite = np.nanmedian(stack, axis=0)
         
         # Заменяем NaN на NoData значение
-        composite[np.isnan(compound)] = -9999
+        composite[np.isnan(composite)] = -9999
         
         # Записываем полосу
         out_band = out_ds.GetRasterBand(band)
