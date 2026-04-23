@@ -25,8 +25,10 @@ def run_script_on_selected(modeladmin, request, queryset):
     
     for obj in queryset:
         modeladmin.message_user(request, "Создается композит для объекта '" + obj.name + "'")
+#        print(f'Имя папки: {obj.files_folder.name}')
         myapp_config = apps.get_app_config('mcbuilder') # Получаем конфиг приложения
-        result = myapp_config.mvc_build(obj)            # Вызываем функцию создания композита
+        result = myapp_config.mvc_build(obj)            # Вызываем функцию создания композита, которая находится в apps.py
+
         if obj.builded:
             modeladmin.message_user(request, "Выбранный композит успешно создан.", level=messages.SUCCESS)
         else:

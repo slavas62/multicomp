@@ -1,8 +1,0 @@
-django
-django-filer
-django-mptt
-django-polymorphic
-easy_thumbnails
-psycopg2
-Pillow
-uwsgi
