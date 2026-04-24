@@ -1,6 +1,7 @@
 from django.apps import AppConfig
 
 from osgeo import gdal, gdal_array
+from django.utils.html import format_html
 
 import numpy as np
 import glob
@@ -15,22 +16,31 @@ class McbuilderConfig(AppConfig):
         # Пример создания медианного композита
         input_files = get_filenames_by_folder_name(obj.files_folder)
         print(f'Исходные файлы из папки {obj.files_folder}: {input_files}')
-        output_file = obj.files_folder.name + '_' + obj.mcfile + '.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
-        print(f'Имя результирующего файла: {output_file}')
 
-        if obj.method.name == 'Медианный композит':          # Создание медианного композита из нескольких разновременных снимков
-            create_median_composite(input_files, output_file)
+        output_folder = obj.files_folder.name  # Папка результата
 
-        if obj.method.name == 'Синтезированный композит':    # Создание синтезированного композита из двух разновременных снимков
+#       *** Создание СИНТЕЗИРОВАННОГО композита из двух разновременных снимков ***
+        if obj.method.name == 'Синтезированный композит':
         # Пример использования:
         # Берём канал 3 из первого файла (красный)
         # и каналы 2,1 из второго файла (зелёный и синий)
+            output_file = output_folder + '_sintez_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
             composite_from_bands(
                 path1=input_files[0], bands1=[3],
                 path2=input_files[1], bands2=[2, 1],
-                out_path=output_file
+                out_path="media/composite/" + output_file
             )
 
+#       *** Создание МЕДИАННОГО композита из нескольких разновременных снимков ***
+        if obj.method.name == 'Медианный композит':
+            output_file = output_folder + '_median_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
+            create_median_composite(
+                input_files,
+                "media/composite/" + output_file
+            )
+
+        print(f'Имя результирующего файла: {output_file}')
+        obj.mcfile = output_file
         obj.builded = True
         return obj.builded
 
@@ -43,7 +53,6 @@ def get_filenames_by_folder_name(folder):
 #        print(f'Полный путь к файлам: {path_files}')
         
         # Создаем список имен файлов
-#        filenames = [f.original_filename for f in files]
         filenames = [f.path for f in files]
         return filenames
     except folder.DoesNotExist:
