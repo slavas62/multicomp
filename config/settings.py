@@ -39,7 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django_cleanup.apps.CleanupConfig',
+    'django_cleanup.apps.CleanupConfig', # Очистка папок FILER после удаления изображений в админке
 #    'filer',
     'easy_thumbnails', # приложение нужно для FILER
     'mptt', # приложение нужно для FILER

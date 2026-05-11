@@ -7,12 +7,15 @@ import numpy as np
 import glob
 import os
 
+import datetime
+
 class McbuilderConfig(AppConfig):
     name = 'mcbuilder'
     verbose_name = 'Создание МВК'
 
     def mvc_build(self, obj):
         outdir = "media/composite/"
+        print(f'Время начала расчета: {datetime.datetime.now()}')
 
        # Пример создания медианного композита
         input_files = get_filenames_by_folder_name(obj.files_folder)
@@ -57,6 +60,8 @@ class McbuilderConfig(AppConfig):
 
         obj.mcfile = output_file
         obj.builded = True
+        print(f'Время окончания расчета: {datetime.datetime.now()}')
+
         return obj.builded
 
 def get_filenames_by_folder_name(folder):
