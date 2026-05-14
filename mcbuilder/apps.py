@@ -1,6 +1,7 @@
 from django.apps import AppConfig
 
 from osgeo import gdal, gdal_array
+from django.contrib import messages
 from django.utils.html import format_html
 
 import numpy as np
@@ -13,22 +14,24 @@ class McbuilderConfig(AppConfig):
     name = 'mcbuilder'
     verbose_name = 'Создание МВК'
 
-    def mvc_build(self, obj):
-        outdir = "media/composite/"
+    def mvc_build(self, modeladmin, request, obj):
+        outdir = os.environ.get('GEOSERVER_OUTDIR_MULTICOMP', 'media/composite/')
+        modeladmin.message_user(request, f'Время начала расчета: {datetime.datetime.now()}', level=messages.WARNING)
         print(f'Время начала расчета: {datetime.datetime.now()}')
+        print(f'Директория результата: {outdir}')
 
        # Пример создания медианного композита
         input_files = get_filenames_by_folder_name(obj.files_folder)
         print(f'Исходные файлы из папки {obj.files_folder}: {input_files}')
 
-        output_folder = obj.files_folder.name  # Папка результата
+        source_folder = obj.files_folder.name  # Папка результата
 
 #       *** Создание СИНТЕЗИРОВАННОГО композита из двух разновременных снимков ***
         if obj.method.name == 'Синтезированный композит':
         # Пример использования:
         # Берём канал 3 из первого файла (красный)
         # и каналы 2,1 из второго файла (зелёный и синий)
-            output_file = output_folder + '_sintez_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
+            output_file = source_folder + '_sintez_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
             composite_from_bands(
                 path1 = input_files[0], bands1=[3],
                 path2 = input_files[1], bands2=[2, 1],
@@ -37,29 +40,22 @@ class McbuilderConfig(AppConfig):
             )
 #       *** Создание МНОГОВРЕМЕННОГО композита из нескольких разновременных снимков с различными методами агреации ***
         elif obj.method.name == 'Многовременной композит':
-            method = 'median' # метод агрегации: 'median', 'mean', 'max', 'min'.
-            output_file = output_folder + '_' + method + '_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
+            agmet = obj.agregat # метод агрегации: 'median', 'mean', 'max', 'min'.
+            output_file = source_folder + '_' + agmet + '_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
             create_multitemporal_composite(
                 input_files,
                 outdir + output_file,
-                method
+                agmet
             )
         else:
-            raise ValueError(f"*** Этот метод пока не поддерживается: {obj.method.name} ***")
-#            ModelAdmin.message_user(request, f"Этот метод пока не поддерживается: {obj.method.name}", level=messages.ERROR)
-
-        '''
-#       *** Создание МЕДИАННОГО композита из нескольких разновременных снимков (частный случай многовременного композита) ***
-        if obj.method.name == 'Медианный композит':
-            output_file = output_folder + '_median_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
-            create_median_composite(
-                input_files,
-                outdir + output_file
-            )
-        '''
+#            raise ValueError(f"*** Этот метод пока не поддерживается: {obj.method.name} ***")
+            modeladmin.message_user(request, f"Этот метод пока не поддерживается: {obj.method.name}", level=messages.ERROR)
+            obj.builded = False
+            return obj.builded
 
         obj.mcfile = output_file
         obj.builded = True
+        modeladmin.message_user(request, f'Время окончания расчета: {datetime.datetime.now()}', level=messages.WARNING)
         print(f'Время окончания расчета: {datetime.datetime.now()}')
 
         return obj.builded
