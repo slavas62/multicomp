@@ -6,6 +6,14 @@ from filer.fields.folder import FilerFolderField
 
 # Create your models here.
 class Mcbuilder(models.Model):
+
+    METHOD_CHOICES = [         # Определение вариантов методов агрегации 'median', 'mean', 'max', 'min для метода многовременного композита
+        ('median', 'Медиана'),
+        ('mean', 'Среднее'),
+        ('max', 'Максимум'),
+        ('min', 'Минимум'),
+    ]
+
     name = models.CharField(u'Название', max_length=50, help_text=u'название мультивременного композита')
     mcfile = models.CharField(u'Имя файла результата', null=True, blank=True, max_length=255, help_text=u'путь к файлу результата')
     files_folder = FilerFolderField(
@@ -17,6 +25,7 @@ class Mcbuilder(models.Model):
     )
     date_created = models.DateTimeField(u'Дата создания', auto_now_add=True, help_text=u'дата создания выходного файла')
     method = models.ForeignKey(Mcmethod, verbose_name =u'Методы МВК', default=4, on_delete=models.PROTECT)
+    agregat = models.CharField(u'Метод агрегации', max_length=10, choices=METHOD_CHOICES, default='median', help_text=u'для многовременного композита')
     resampl = models.BooleanField(u'Выполнить ресемплинг', default=False, help_text=u'привести снимки к единой проекции, размерам, разрешению и extent.')
     description = models.TextField(u'Описание', null=True, blank=True, help_text=u'описание результата')
     builded = models.BooleanField(u'Выполнено', default=False, help_text=u'композит успешно создан')
