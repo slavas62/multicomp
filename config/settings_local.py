@@ -7,7 +7,7 @@ INTERNAL_IPS = ('127.0.0.1',)
 DATABASES = {
     'default': {
         'ENGINE': 'django.contrib.gis.db.backends.postgis',
-        'NAME': 'multicomp',   # name of system database
+        'NAME': 'multicomp-home',   # name of system database
         'USER': 'postgres',
         'PASSWORD': 'ntnhfrcby_19',
         'HOST': 'localhost',
