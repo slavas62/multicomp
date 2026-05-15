@@ -221,7 +221,9 @@ def create_multitemporal_composite(modeladmin, request, input_files, output_file
     # Открываем первый файл для получения метаданных
     ds_ref = gdal.Open(input_files[0], gdal.GA_ReadOnly)
     if ds_ref is None:
-        raise IOError(f"Не удалось открыть {input_files[0]}")
+#        raise IOError(f"Не удалось открыть {input_files[0]}")
+        modeladmin.message_user(request, f"Не удалось открыть {input_files[0]}", level=messages.ERROR)
+        return False
 
     cols = ds_ref.RasterXSize
     rows = ds_ref.RasterYSize

@@ -34,13 +34,12 @@ def run_script_on_selected(modeladmin, request, queryset):
         result = myapp_config.mvc_build(modeladmin, request, obj)  # Вызываем функцию создания композита, которая находится в apps.py
 
         if obj.builded:
-            modeladmin.message_user(request, "Выбранный композит успешно создан.", level=messages.SUCCESS)
+            modeladmin.message_user(request, f"Композит {obj.mcfile} успешно создан.", level=messages.SUCCESS)
         else:
-            modeladmin.message_user(request, "Ошибка создания композита.", level=messages.ERROR)
+            modeladmin.message_user(request, f"Ошибка создания композита {obj.mcfile}.", level=messages.ERROR)
             pass
 
         obj.save()
-#        print(f"Админка получила: {result}")
     
 
 
@@ -57,7 +56,7 @@ class McbuilderAdmin(admin.ModelAdmin):
 #    readonly_fields = ('mcfile',)
     
     class Media:            # Подключаем JS для визуализации поля метода агрегации при выборе метода многовременного композита
-        js = ('js_code/method_fields.js',)
+        js = ('js_code/method_fields.js', 'js_code/lock_action.js',)
 
 
     def get_folder_link(self, obj):    # Ссылка на редактирование папки в виде её названия в списке композитов в админке
