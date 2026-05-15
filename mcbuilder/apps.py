@@ -32,7 +32,9 @@ class McbuilderConfig(AppConfig):
         # Берём канал 3 из первого файла (красный)
         # и каналы 2,1 из второго файла (зелёный и синий)
             output_file = source_folder + '_sintez_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
-            composite_from_bands(
+            created = composite_from_bands(
+                modeladmin,
+                request,
                 path1 = input_files[0], bands1=[3],
                 path2 = input_files[1], bands2=[2, 1],
                 out_path = outdir + output_file,
@@ -42,7 +44,9 @@ class McbuilderConfig(AppConfig):
         elif obj.method.name == 'Многовременной композит':
             agmet = obj.agregat # метод агрегации: 'median', 'mean', 'max', 'min'.
             output_file = source_folder + '_' + agmet + '_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
-            create_multitemporal_composite(
+            created = create_multitemporal_composite(
+                modeladmin,
+                request,
                 input_files,
                 outdir + output_file,
                 agmet
@@ -53,10 +57,12 @@ class McbuilderConfig(AppConfig):
             obj.builded = False
             return obj.builded
 
-        obj.mcfile = output_file
-        obj.builded = True
-        modeladmin.message_user(request, f'Время окончания расчета: {datetime.datetime.now()}', level=messages.WARNING)
-        print(f'Время окончания расчета: {datetime.datetime.now()}')
+        obj.builded = created
+
+        if created:
+            obj.mcfile = output_file
+            modeladmin.message_user(request, f'Время окончания расчета: {datetime.datetime.now()}', level=messages.WARNING)
+            print(f'Время окончания расчета: {datetime.datetime.now()}')
 
         return obj.builded
 
@@ -116,7 +122,7 @@ def reproject_to_match(src_file, target_file, match_file): # Перепроец�
 
 
 # *** Синтезированный композит по трем каналам из разных снимков ***
-def composite_from_bands(path1, bands1, path2, bands2, out_path, resampl, driver_name='GTiff'):
+def composite_from_bands(modeladmin, request, path1, bands1, path2, bands2, out_path, resampl, driver_name='GTiff'):
     """
     Создаёт мультиканальный растр, объединяя указанные каналы из двух разных файлов.
 
@@ -144,12 +150,19 @@ def composite_from_bands(path1, bands1, path2, bands2, out_path, resampl, driver
 
     # Проверяем совпадение размеров, проекции и геотрансформации
     if ds1.RasterXSize != ds2.RasterXSize or ds1.RasterYSize != ds2.RasterYSize:
-        raise ValueError("Размеры растров не совпадают")
+#        raise ValueError("Размеры растров не совпадают")
+        modeladmin.message_user(request, f"Размеры растров не совпадают", level=messages.ERROR)
+        return False
+
     if ds1.GetProjection() != ds2.GetProjection():
-        raise ValueError("Проекции растров не совпадают")
+#        raise ValueError("Проекции растров не совпадают")
+        modeladmin.message_user(request, f"Проекции растров не совпадают", level=messages.ERROR)
+        return False
+
     geotransform = ds1.GetGeoTransform()
     if geotransform != ds2.GetGeoTransform():
-        print("Предупреждение: геотрансформации различаются, будет использована трансформация первого файла")
+#        print("Предупреждение: геотрансформации различаются, будет использована трансформация первого файла")
+        modeladmin.message_user(request, f"Предупреждение: геотрансформации различаются, будет использована трансформация первого файла", level=messages.WARNING)
 
     # Определяем количество каналов в выходном растре
     num_bands = len(bands1) + len(bands2)
@@ -190,11 +203,10 @@ def composite_from_bands(path1, bands1, path2, bands2, out_path, resampl, driver
     ds2 = None
     out_ds = None
 
-    print(f"Синтезированный растр сохранён: {out_path}")
+    return True
 
 
-
-def create_multitemporal_composite(input_files, output_file, method='median'):
+def create_multitemporal_composite(modeladmin, request, input_files, output_file, method='median'):
     """
     Создаёт мультивременной композит из списка входных растров.
 
@@ -275,61 +287,4 @@ def create_multitemporal_composite(input_files, output_file, method='median'):
         out_ds = None
         ds_ref = None
 
-
-
-def create_median_composite(input_files, output_file):
-    """
-    Создание медианного композита из нескольких разновременных снимков
-
-    Параметры:
-    input_files (list): Список путей к входным файлам
-    output_file (str): Путь для сохранения композита
-    """
-
-    # Открываем первый файл для получения параметров
-    ds = gdal.Open(input_files[0])
-    cols = ds.RasterXSize
-    rows = ds.RasterYSize
-    bands = ds.RasterCount
-    geotransform = ds.GetGeoTransform()
-    projection = ds.GetProjection()
-    ds = None
-
-    # Создаем выходной файл
-    driver = gdal.GetDriverByName('GTiff')
-    out_ds = driver.Create(output_file, cols, rows, bands, gdal.GDT_Float32)
-    out_ds.SetGeoTransform(geotransform)
-    out_ds.SetProjection(projection)
-
-    # Обрабатываем каждую полосу
-    for band in range(1, bands + 1):
-        print(f"Обработка полосы {band}...")
-
-        # Создаем 3D массив для всех временных срезов
-        time_series = []
-
-        for file in input_files:
-            ds = gdal.Open(file)
-            data = ds.GetRasterBand(band).ReadAsArray().astype(np.float32)
-
-            # Заменяем NoData значения на NaN
-            data[data == ds.GetRasterBand(band).GetNoDataValue()] = np.nan
-            time_series.append(data)
-            ds = None
-
-        # Стек временных срезов
-        stack = np.stack(time_series, axis=0)
-
-        # Вычисляем медиану по временной оси
-        composite = np.nanmedian(stack, axis=0)
-
-        # Заменяем NaN на NoData значение
-        composite[np.isnan(composite)] = -9999
-
-        # Записываем полосу
-        out_band = out_ds.GetRasterBand(band)
-        out_band.WriteArray(composite)
-        out_band.SetNoDataValue(-9999)
-
-    out_ds = None
-    print(f"Композит сохранен в {output_file}")
+        return True

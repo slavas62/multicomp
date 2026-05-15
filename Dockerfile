@@ -41,6 +41,7 @@ WORKDIR /app
 # Копирование исходного кода проекта
 COPY . /app/
 
+
 # Настройка nginx
 COPY nginx.conf /etc/nginx/sites-available/default
 RUN rm /etc/nginx/sites-enabled/default && \
@@ -58,4 +59,10 @@ RUN python manage.py collectstatic --noinput
 EXPOSE 80
 
 # Запуск supervisor (управляет gunicorn и nginx)
-CMD ["supervisord", "-n"]
+#CMD ["supervisord", "-n"]
+
+# Копирование и подготовка entrypoint
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
