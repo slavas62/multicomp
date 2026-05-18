@@ -50,13 +50,42 @@ run_script_on_selected.short_description = "Запустить создание 
 class McbuilderAdmin(admin.ModelAdmin):
     actions = [run_script_on_selected]  # Добавляем функцию запуска в список "Действий" админки
 
-    list_display = ('name', 'get_folder_link', 'method', 'builded', 'get_result_link', 'date_created') # Поля в списке
+    list_display = ('name', 'get_folder_link', 'method', 'builded', 'get_result_link', 'date_created', 'author') # Поля в списке
     list_filter = ('name', 'mcfile')   # Фильтры справа
     search_fields = ('name', 'mcfile') # Поиск по полям
-#    readonly_fields = ('mcfile',)
+    readonly_fields = ('author',)
     
     class Media:            # Подключаем JS для визуализации поля метода агрегации при выборе метода многовременного композита
         js = ('js_code/method_fields.js', 'js_code/lock_action.js',)
+
+# Автоматическое сохранение автора
+    def save_model(self, request, obj, form, change):
+        if not change:                # Только при создании нового объекта
+            obj.author = request.user
+        super().save_model(request, obj, form, change)
+# Фильтрация списка объектов (queryset) текущего пользователя
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+
+        if request.user.is_superuser:   # Суперпользователь видит всё
+            return qs
+        return qs.filter(author=request.user)
+# Ограничение прав на изменение и удаление чужих объектов
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and not request.user.is_superuser and obj.author != request.user:   # Суперпользователь видит всё
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and not request.user.is_superuser and obj.author != request.user:   # Суперпользователь видит всё
+            return False
+        return super().has_delete_permission(request, obj)
+
+    def has_view_permission(self, request, obj=None):
+        if obj is not None and not request.user.is_superuser and obj.author != request.user:   # Суперпользователь видит всё
+            return False
+        return super().has_view_permission(request, obj)
+
 
 
     def get_folder_link(self, obj):    # Ссылка на редактирование папки в виде её названия в списке композитов в админке

@@ -3,6 +3,7 @@
 from django.db import models
 from mcmethod.models import Mcmethod
 from filer.fields.folder import FilerFolderField
+from django.contrib.auth.models import User
 
 # Create your models here.
 class Mcbuilder(models.Model):
@@ -29,7 +30,8 @@ class Mcbuilder(models.Model):
     resampl = models.BooleanField(u'Выполнить ресемплинг', default=False, help_text=u'привести снимки к единой проекции, размерам, разрешению и extent.')
     description = models.TextField(u'Описание', null=True, blank=True, help_text=u'описание результата')
     builded = models.BooleanField(u'Выполнено', default=False, help_text=u'композит успешно создан')
-   
+    author = models.ForeignKey(User, verbose_name =u'Автор', on_delete=models.CASCADE, default=1, editable=False)
+
     class Meta:
         verbose_name = u'параметры создания МВК'
         verbose_name_plural = u'параметры создания МВК'
