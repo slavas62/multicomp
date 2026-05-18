@@ -29,7 +29,7 @@ RUN conda install -n multicomp -c conda-forge \
     django-mptt \
     django-cleanup \
     gdal \
-    numpy \
+    numpy==1.26.4 \
     psycopg2 \
     gunicorn \
     -y && \
@@ -51,7 +51,7 @@ RUN rm /etc/nginx/sites-enabled/default && \
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Сбор статики Django (предполагается, что STATIC_ROOT настроен)
-RUN python manage.py collectstatic --noinput
+#RUN python manage.py collectstatic --noinput
 # Выполнение миграций БД
 #RUN python manage.py migrate --fake-initial --noinput
 
