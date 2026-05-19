@@ -10,6 +10,8 @@ import os
 
 import datetime
 
+from pathlib import Path
+
 class McbuilderConfig(AppConfig):
     name = 'mcbuilder'
     verbose_name = 'Создание МВК'
@@ -23,7 +25,6 @@ class McbuilderConfig(AppConfig):
         print(f'Время начала расчета: {datetime.datetime.now()}')
         print(f'Директория результата: {outdir}')
 
-       # Пример создания медианного композита
         input_files = get_filenames_by_folder_name(obj.files_folder)
         print(f'Исходные файлы из папки {obj.files_folder}: {input_files}')
 
@@ -32,14 +33,14 @@ class McbuilderConfig(AppConfig):
 #       *** Создание СИНТЕЗИРОВАННОГО композита из двух разновременных снимков ***
         if obj.method.name == 'Синтезированный композит':
         # Пример использования:
-        # Берём канал 3 из первого файла (красный)
-        # и каналы 2,1 из второго файла (зелёный и синий)
+        # Берём самый яркий 2-ой канал (зеленый) из первого файла, снятого последним
+        # и каналы 3,1  (красный и синий) из второго файла, снятого ранее
             output_file = obj.author.username + '_' + source_folder + '_sintez_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
             created = composite_from_bands(
                 modeladmin,
                 request,
-                path1 = input_files[0], bands1=[3],
-                path2 = input_files[1], bands2=[2, 1],
+                path1 = input_files[0], bands1=[2], # это будет красный канал в результирующем файле
+                path2 = input_files[1], bands2=[3, 1],
                 out_path = outdir + output_file,
                 resampl = obj.resampl
             )
@@ -70,6 +71,8 @@ class McbuilderConfig(AppConfig):
         return obj.builded
 
 def get_filenames_by_folder_name(folder):
+    import numpy as np
+
     try:
         # Получаем все файлы в этой папке (и подпапках, если нужно)
         # folder.files — это менеджер связанных файлов
@@ -78,8 +81,12 @@ def get_filenames_by_folder_name(folder):
 #        print(f'Полный путь к файлам: {path_files}')
 
         # Создаем список имен файлов
-        filenames = [f.path for f in files]
-        return filenames
+        filepath = [f.path for f in files]
+        filenames = [Path(f.path).name for f in files]
+
+        indices = np.argsort(filenames)[::-1] # массив отсортированных индексов массива filenames (сортировка индексов по убыванию имен файлов)
+
+        return [filepath[i] for i in indices]
     except folder.DoesNotExist:
         return []
 
