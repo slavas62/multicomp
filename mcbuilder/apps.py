@@ -14,6 +14,9 @@ class McbuilderConfig(AppConfig):
     name = 'mcbuilder'
     verbose_name = 'Создание МВК'
 
+    def ready(self):              # Импортируем сигналы, чтобы они зарегистрировались
+        import mcbuilder.signals  # noqa: F401
+
     def mvc_build(self, modeladmin, request, obj):
         outdir = os.environ.get('GEOSERVER_OUTDIR_MULTICOMP', 'media/composite/')
         modeladmin.message_user(request, f'Время начала расчета: {datetime.datetime.now()}', level=messages.WARNING)
@@ -31,7 +34,7 @@ class McbuilderConfig(AppConfig):
         # Пример использования:
         # Берём канал 3 из первого файла (красный)
         # и каналы 2,1 из второго файла (зелёный и синий)
-            output_file = source_folder + '_sintez_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
+            output_file = obj.author.username + '_' + source_folder + '_sintez_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
             created = composite_from_bands(
                 modeladmin,
                 request,
@@ -43,7 +46,7 @@ class McbuilderConfig(AppConfig):
 #       *** Создание МНОГОВРЕМЕННОГО композита из нескольких разновременных снимков с различными методами агреации ***
         elif obj.method.name == 'Многовременной композит':
             agmet = obj.agregat # метод агрегации: 'median', 'mean', 'max', 'min'.
-            output_file = source_folder + '_' + agmet + '_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
+            output_file = obj.author.username + '_' + source_folder + '_' + agmet + '_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
             created = create_multitemporal_composite(
                 modeladmin,
                 request,

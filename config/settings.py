@@ -31,6 +31,8 @@ ALLOWED_HOSTS = ['*']
 
 DEFAULT_AUTO_FIELD='django.db.models.AutoField'
 
+FILER_ENABLE_PERMISSIONS = True
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -46,7 +48,7 @@ INSTALLED_APPS = [
     'mptt', # приложение нужно для FILER
     'config.filer_config.FilerConfig', # добавляем приложение FILER с изхмененной конфигурацией в config/filer_config.py и названиями в mcbuilder/admin.py
     'mcmethod',
-    'mcbuilder',
+    'mcbuilder.apps.McbuilderConfig',
 ]
 
 MIDDLEWARE = [

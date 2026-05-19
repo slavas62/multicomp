@@ -12,12 +12,27 @@ import os
 
 # *** Задаем новые настройки FILER ***
 
+
 admin.site.unregister(Folder) # Отменяем стандартную регистрацию, чтобы задать свои настройки FILER
-@admin.register(Folder)
+
 class CustomFolderAdmin(FolderAdmin):
-    pass
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        # Показываем только папки, где владелец – текущий пользователь, плюс папки без владельца (например, общие)
+        return qs.filter(owner=request.user)
+
+    def save_model(self, request, obj, form, change):
+        if not change:  # При создании принудительно ставим владельца
+            obj.owner = request.user
+        super().save_model(request, obj, form, change)
+
 Folder._meta.verbose_name = "Папка с исходниками" # Переименовываем названия в админке FILER
 Folder._meta.verbose_name_plural = "Папки с исходниками"
+
+admin.site.register(Folder, CustomFolderAdmin)
 
 
 
