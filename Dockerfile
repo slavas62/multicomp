@@ -22,7 +22,7 @@ RUN conda create -n multicomp python=3.11 -y && \
 # Активация окружения по умолчанию
 ENV PATH=/opt/conda/envs/multicomp/bin:$PATH
 
-# Установка всех необходимых Python‑пакетов через conda (включая gdal, numpy, psycopg2)
+# Установка всех необходимых Python‑пакетов через conda (включая gdal, numpy, psycopg2), где numpy==1.26.4 старая версия, которую поддерживают старые сервера в ЦОД РКС
 RUN conda install -n multicomp -c conda-forge \
     django \
     django-filer \

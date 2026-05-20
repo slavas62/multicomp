@@ -226,7 +226,8 @@ def create_multitemporal_composite(modeladmin, request, input_files, output_file
         method (str): метод агрегации: 'median', 'mean', 'max', 'min'.
     """
     if not input_files:
-        raise ValueError("Список входных файлов пуст")
+#        raise ValueError("Список входных файлов пуст")
+        modeladmin.message_user(request, f"Список входных файлов пуст", level=messages.WARNING)
 
     # Открываем первый файл для получения метаданных
     ds_ref = gdal.Open(input_files[0], gdal.GA_ReadOnly)
@@ -271,8 +272,7 @@ def create_multitemporal_composite(modeladmin, request, input_files, output_file
                     data = band.ReadAsArray(0, row, cols, n_rows).astype(np.float32)
                     stack.append(data)
 
-                # Стек: (n_files, n_rows, cols)
-                stack = np.array(stack)
+                stack = np.array(stack)   # Стек: (n_files, n_rows, cols)
 
                 # Агрегация по оси времени (первая ось)
                 if method == 'median':
@@ -284,7 +284,8 @@ def create_multitemporal_composite(modeladmin, request, input_files, output_file
                 elif method == 'min':
                     composite = np.min(stack, axis=0)
                 else:
-                    raise ValueError(f"Неподдерживаемый метод: {method}")
+#                    raise ValueError(f"Неподдерживаемый метод: {method}")
+                    modeladmin.message_user(request, f"Неподдерживаемый метод: {method}", level=messages.ERROR)
 
                 # Запись блока
                 band_out.WriteArray(composite, 0, row)
