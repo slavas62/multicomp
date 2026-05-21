@@ -161,12 +161,12 @@ def composite_from_bands(modeladmin, request, path1, bands1, path2, bands2, out_
     # Проверяем совпадение размеров, проекции и геотрансформации
     if ds1.RasterXSize != ds2.RasterXSize or ds1.RasterYSize != ds2.RasterYSize:
 #        raise ValueError("Размеры растров не совпадают")
-        modeladmin.message_user(request, f"Размеры растров не совпадают", level=messages.ERROR)
+        modeladmin.message_user(request, f"Размеры растров не совпадают, включите 'Выполнить ресемплинг'", level=messages.ERROR)
         return False
 
     if ds1.GetProjection() != ds2.GetProjection():
 #        raise ValueError("Проекции растров не совпадают")
-        modeladmin.message_user(request, f"Проекции растров не совпадают", level=messages.ERROR)
+        modeladmin.message_user(request, f"Проекции растров не совпадают, включите 'Выполнить ресемплинг'", level=messages.ERROR)
         return False
 
     geotransform = ds1.GetGeoTransform()
@@ -243,9 +243,13 @@ def create_multitemporal_composite(modeladmin, request, input_files, output_file
     geotransform = ds_ref.GetGeoTransform()
 
     # Выбираем тип данных (можно задать вручную, здесь сохраняем как Float32)
-    out_dtype = gdal.GDT_Float32
+    out_dtype = gdal.GDT_Byte # GDT_Float32 это тип значений пикселов одного банда выходного растра
 
     # Создаём выходной файл
+#    driver = gdal.GetDriverByName('ECW')
+#    compression = 10
+#    out_ds = driver.Create(output_file, cols, rows, bands, out_dtype, options=[f"TARGET={compression}"])
+
     driver = gdal.GetDriverByName('GTiff')
     out_ds = driver.Create(output_file, cols, rows, bands, out_dtype, options=['COMPRESS=LZW'])
     out_ds.SetProjection(projection)
