@@ -38,7 +38,7 @@ admin.site.register(Folder, CustomFolderAdmin)
 
 # *** Управление в админке запуском функции создания композита для выбранного в списке ***
 
-def run_script_on_selected(modeladmin, request, queryset):
+def run_script_create_composit(modeladmin, request, queryset):
     from django.apps import apps
     
     for obj in queryset:
@@ -57,13 +57,19 @@ def run_script_on_selected(modeladmin, request, queryset):
         obj.save()
     
 
+def run_clear_folder_field(modeladmin, request, queryset):
+    queryset.update(files_folder=None)
+    queryset.update(builded=False)
+    queryset.update(mcfile=None)
+
 
 # *** Регистрируем основную модель микросервиса в админке ***
 
-run_script_on_selected.short_description = "Запустить создание выбранного композита"
+run_clear_folder_field.short_description = "Удалить папку данных для выбранных параметров"
+run_script_create_composit.short_description = "Запустить создание выбранных композитов"
 @admin.register(Mcbuilder)
 class McbuilderAdmin(admin.ModelAdmin):
-    actions = [run_script_on_selected]  # Добавляем функцию запуска в список "Действий" админки
+    actions = [run_clear_folder_field, run_script_create_composit, ]  # Добавляем функцию запуска в список "Действий" админки
 
     list_display = ('name', 'get_folder_link', 'method', 'builded', 'get_result_link', 'date_created', 'author') # Поля в списке
     list_filter = ('name', 'mcfile')   # Фильтры справа
