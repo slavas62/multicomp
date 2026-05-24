@@ -77,7 +77,7 @@ class McbuilderAdmin(admin.ModelAdmin):
     readonly_fields = ('author',)
     
     class Media:            # Подключаем JS для визуализации поля метода агрегации при выборе метода многовременного композита
-        js = ('js_code/method_fields.js', 'js_code/lock_action.js',)
+        js = ('js_code/method_fields.js', 'js_code/lock_action.js', 'js_code/change_title_filer.js')
 
 # Автоматическое сохранение автора
     def save_model(self, request, obj, form, change):
