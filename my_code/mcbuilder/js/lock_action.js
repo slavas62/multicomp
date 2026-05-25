@@ -1,4 +1,5 @@
 'use strict';
+// Функция маскирования интерфейса в процессе создания композита
 
 document.addEventListener('DOMContentLoaded', function() {
     const actionForm = document.querySelector('#changelist-form');
