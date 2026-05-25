@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', function() {
     actionForm.addEventListener('submit', function(e) {
         // Проверяем, выбрано ли действие
         const actionSelect = document.querySelector('select[name="action"]');
-        if (actionSelect.value === "") return;
+        if (actionSelect.value === "" || actionSelect.value === "run_clear_folder_field") return;
 
         // Создаем оверлей
         const overlay = document.createElement('div');
