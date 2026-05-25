@@ -1,0 +1,6 @@
+/* your_app/static/your_app/css/filer_widget.css */
+
+/* Скрываем кнопку очистки */
+.filerClearer {
+    display: none !important;
+}
