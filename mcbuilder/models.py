@@ -42,7 +42,7 @@ class Mcbuilder(models.Model):
     method = models.ForeignKey(Mcmethod, verbose_name =u'Методы МВК', default=4, on_delete=models.PROTECT)
     agregat = models.CharField(u'Метод агрегации', max_length=10, choices=METHOD_CHOICES, default='median', help_text=u'для многовременного композита')
     ctypes = models.CharField(u'Тип композита', max_length=30, choices=METHOD_CTYPES, default='range', help_text=u'с поддержкой многоканальных файлов')
-    bands = models.CharField(u'Рабочий канал', max_length=30, choices=BANDS_COMBIN, default='2', help_text=u'исходные каналы для создания композита')
+    bands = models.CharField(u'Рабочий канал', max_length=30, choices=BANDS_COMBIN, default='Red', help_text=u'исходные каналы для создания композита')
     resampl = models.BooleanField(u'Выполнить ресемплинг', default=False, help_text=u'привести снимки к единой проекции, размерам, разрешению и extent.')
     description = models.TextField(u'Описание', null=True, blank=True, help_text=u'описание результата')
     builded = models.BooleanField(u'Выполнено', default=False, help_text=u'композит успешно создан')
