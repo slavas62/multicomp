@@ -2,7 +2,7 @@
 set -e
 
 echo "Running migrations..."
-#python manage.py collectstatic --noinput
+python manage.py collectstatic --noinput
 python manage.py makemigrations
 python manage.py migrate 
 

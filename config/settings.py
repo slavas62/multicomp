@@ -43,10 +43,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django_cleanup.apps.CleanupConfig', # Очистка папок FILER после удаления изображений в админке
-#    'filer',
-    'easy_thumbnails', # приложение нужно для FILER
-    'mptt', # приложение нужно для FILER
-    'config.filer_config.FilerConfig', # добавляем приложение FILER с изхмененной конфигурацией в config/filer_config.py и названиями в mcbuilder/admin.py
+    'filer',
+    'easy_thumbnails',                   # приложение нужно для FILER
+    'mptt',                              # приложение нужно для FILER
+#    'config.filer_config.FilerConfig',   # добавляем приложение FILER с измененной конфигурацией в config/filer_config.py и названиями в mcbuilder/admin.py
     'mcmethod',
     'mcbuilder.apps.McbuilderConfig',
 ]

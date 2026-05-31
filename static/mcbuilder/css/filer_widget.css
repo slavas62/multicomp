@@ -4,3 +4,13 @@
 .filerClearer {
     display: none !important;
 }
+
+.filer-dropzone {
+    max-width: 610px;
+    width: stretch !important;
+}
+
+span:not(:empty):not(.choose-file):not(.replace-file):not(.edit-file) {
+	overflow: visible !important;
+	width: auto !important;;
+}
