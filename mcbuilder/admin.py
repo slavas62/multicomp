@@ -87,6 +87,8 @@ class McbuilderAdmin(admin.ModelAdmin):
         }
 # Автоматическое сохранение автора
     def save_model(self, request, obj, form, change):
+        obj.builded = False
+        obj.mcfile = None
         if not change:                # Только при создании нового объекта
             obj.author = request.user
         super().save_model(request, obj, form, change)

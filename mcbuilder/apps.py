@@ -8,6 +8,7 @@ import numpy as np
 import glob
 import os
 
+import time
 import datetime
 
 from pathlib import Path
@@ -31,7 +32,8 @@ class McbuilderConfig(AppConfig):
         source_folder = obj.files_folder.name  # Папка результата
 
 #       *** Создание СИНТЕЗИРОВАННОГО композита из двух разновременных снимков ***
-        if obj.method.name == 'Синтезированный композит':
+#        if obj.method.name == 'Синтезированный композит':
+        if obj.method.alias == 'sintez':
         # Пример использования:
         # Берём самый яркий 2-ой канал (зеленый) из первого файла, снятого последним
         # и каналы 3,1  (красный и синий) из второго файла, снятого ранее
@@ -45,7 +47,8 @@ class McbuilderConfig(AppConfig):
                 resampl = obj.resampl
             )
 #       *** Создание МНОГОВРЕМЕННОГО композита из нескольких разновременных снимков с различными методами агреации ***
-        elif obj.method.name == 'Многовременной композит':
+#        elif obj.method.name == 'Многовременной композит':
+        elif obj.method.alias == 'multitemp':
             agmet = obj.agregat # метод агрегации: 'median', 'mean', 'max', 'min'.
             output_file = obj.author.username + '_' + source_folder + '_' + agmet + '_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
             created = create_multitemporal_composite(
@@ -55,8 +58,40 @@ class McbuilderConfig(AppConfig):
                 outdir + output_file,
                 agmet
             )
+#       *** Создание различных типов РАЗНОСТНОГО композита из нескольких разновременных снимков  ***
+#        elif obj.method.name == 'Разностный композит временного ряда':
+        elif obj.method.alias == 'differеnce':
+            agmet = obj.ctypes # 'range'
+            if obj.bands == 'RGB':
+                bands = [1,2,3]
+            elif obj.bands == 'Red':
+                bands = [1]
+            elif obj.bands == 'Green':
+                bands = [2]
+            elif obj.bands == 'Blue':
+                bands = [3]
+
+            output_file = obj.author.username + '_' + source_folder + '_' + agmet + '_' + obj.bands + '_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
+            created = advanced_temporal_composite(
+                modeladmin,
+                request,
+                input_files,
+                outdir + output_file,
+                resampl = obj.resampl,
+                bands = bands,
+                composite_type = agmet,
+                block_size = 256,
+            )
+            '''
+            created = temporal_range_composite_blockwise(
+                modeladmin,
+                request,
+                input_files,
+                outdir + output_file,
+                resampl = obj.resampl
+            )
+            '''
         else:
-#            raise ValueError(f"*** Этот метод пока не поддерживается: {obj.method.name} ***")
             modeladmin.message_user(request, f"Этот метод пока не поддерживается: {obj.method.name}", level=messages.ERROR)
             obj.builded = False
             return obj.builded
@@ -85,6 +120,7 @@ def get_filenames_by_folder_name(folder):
         filenames = [Path(f.path).name for f in files]
 
         indices = np.argsort(filenames)[::-1] # массив отсортированных индексов массива filenames (сортировка индексов по убыванию имен файлов)
+#        indices = np.argsort(filenames)        # массив отсортированных индексов массива filenames (сортировка индексов по возрастанию имен файлов)
 
         return [filepath[i] for i in indices]
     except folder.DoesNotExist:
@@ -156,17 +192,21 @@ def composite_from_bands(modeladmin, request, path1, bands1, path2, bands2, out_
         ds2 = gdal.Open(path2)
 
     if ds1 is None or ds2 is None:
-        raise RuntimeError("Не удалось открыть один из файлов")
+        modeladmin.message_user(request, f"Не удалось открыть один из файлов", level=messages.ERROR)
 
     # Проверяем совпадение размеров, проекции и геотрансформации
     if ds1.RasterXSize != ds2.RasterXSize or ds1.RasterYSize != ds2.RasterYSize:
 #        raise ValueError("Размеры растров не совпадают")
         modeladmin.message_user(request, f"Размеры растров не совпадают, включите 'Выполнить ресемплинг'", level=messages.ERROR)
+        ds1 = None
+        ds2 = None
         return False
 
     if ds1.GetProjection() != ds2.GetProjection():
 #        raise ValueError("Проекции растров не совпадают")
         modeladmin.message_user(request, f"Проекции растров не совпадают, включите 'Выполнить ресемплинг'", level=messages.ERROR)
+        ds1 = None
+        ds2 = None
         return False
 
     geotransform = ds1.GetGeoTransform()
@@ -303,5 +343,387 @@ def create_multitemporal_composite(modeladmin, request, input_files, output_file
             ds = None
         out_ds = None
         ds_ref = None
-
         return True
+
+
+class BlockProgressBar:
+    """Простой прогресс-бар для поблочной обработки"""
+    def __init__(self, total_blocks):
+        self.total_blocks = total_blocks
+        self.processed_blocks = 0
+        self.start_time = time.time()
+
+    def update(self, modeladmin, request):
+        self.processed_blocks += 1
+        if self.processed_blocks % 10 == 0 or self.processed_blocks == self.total_blocks:
+            percent = (self.processed_blocks / self.total_blocks) * 100
+            elapsed = time.time() - self.start_time
+            print(f"Прогресс: {percent:.1f}% | Обработано блоков: {self.processed_blocks}/{self.total_blocks} | Время: {elapsed:.1f}с")
+#            modeladmin.message_user(request, f"Прогресс: {percent:.1f}% | Обработано блоков: {self.processed_blocks}/{self.total_blocks} | Время: {elapsed:.1f}с", level=messages.SUCCESS)
+
+def advanced_temporal_composite(modeladmin, request, input_files, output_path, resampl, bands=None, composite_type='range', block_size=512):
+    """
+    Расширенная версия с поддержкой многополосных файлов и разными типами композитов
+
+    Parameters:
+    input_files (list): Список входных файлов
+    output_path (str): Путь для сохранения
+    bands (list): Список полос для обработки (None - все полосы)
+    composite_type (str): 'range', 'std', 'coefficient_of_variation', 'difference_sum'
+    block_size (int): Размер блока
+    """
+    if not input_files:
+        raise ValueError("Список файлов пуст")
+
+    # Открываем первый файл для метаданных
+    path1 = input_files[0]
+    ds1 = gdal.Open(path1)
+    cols = ds1.RasterXSize
+    rows = ds1.RasterYSize
+    geotransform = ds1.GetGeoTransform()
+    projection = ds1.GetProjection()
+
+    for i in range(1, len(input_files)): # Проверка файлов на соответствие и ресэмлинг
+        if resampl:
+            reproject_to_match(input_files[i], f'resample{i}.tif', path1)
+            input_files[i] = f'resample{i}.tif'
+        else:
+            ds2 = gdal.Open(input_files[i])
+            # Проверяем совпадение размеров, проекции и геотрансформации
+            if ds1.RasterXSize != ds2.RasterXSize or ds1.RasterYSize != ds2.RasterYSize:
+                modeladmin.message_user(request, f"Размеры растров не совпадают, включите 'Выполнить ресемплинг'", level=messages.ERROR)
+                ds1 = None
+                ds2 = None
+                return False
+            if ds1.GetProjection() != ds2.GetProjection():
+                modeladmin.message_user(request, f"Проекции растров не совпадают, включите 'Выполнить ресемплинг'", level=messages.ERROR)
+                ds1 = None
+                ds2 = None
+                return False
+            if geotransform != ds2.GetGeoTransform():
+                modeladmin.message_user(request, f"Предупреждение: геотрансформации различаются, будет использована трансформация первого файла", level=messages.WARNING)
+            ds2 = None
+
+    if bands is None:
+        bands = list(range(1, ds1.RasterCount + 1))
+
+    # Проверяем, что все файлы имеют одинаковое количество полос
+    for file_path in input_files:
+        ds = gdal.Open(file_path)
+        if ds.RasterCount != ds1.RasterCount:
+            modeladmin.message_user(request, f"Предупреждение: {file_path} имеет {ds.RasterCount} полос, ожидалось {ds1.RasterCount}", level=messages.WARNING)
+        ds = None
+
+    # Создаем выходной файл (столько же полос, сколько входных)
+    driver = gdal.GetDriverByName('GTiff')
+    out_ds = driver.Create(
+        output_path, cols, rows, len(bands),
+        gdal.GDT_Byte, # GDT_Float32,
+        options=['COMPRESS=LZW', 'TILED=YES', 'BIGTIFF=IF_SAFER']
+    )
+    out_ds.SetGeoTransform(geotransform)
+    out_ds.SetProjection(projection)
+
+    # Настраиваем выходные полосы
+    out_bands = []
+    for i, band_num in enumerate(bands, 1):
+        out_band = out_ds.GetRasterBand(i)
+        out_band.SetNoDataValue(-9999)
+        out_band.SetDescription(f"Band_{band_num}_{composite_type}")
+        out_bands.append(out_band)
+
+    # Вычисляем количество блоков
+    num_blocks = (rows + block_size - 1) // block_size
+    progress = BlockProgressBar(num_blocks)
+
+    # Обрабатываем каждый блок
+    for y_start in range(0, rows, block_size):
+        y_end = min(y_start + block_size, rows)
+        block_rows = y_end - y_start
+
+        # Для каждой полосы обрабатываем отдельно
+        for band_idx, band_num in enumerate(bands):
+            # Читаем текущую полосу из всех файлов для этого блока
+            block_stack = []
+
+            for file_path in input_files:
+                ds = gdal.Open(file_path)
+                data = ds.GetRasterBand(band_num).ReadAsArray(
+                    0, y_start, cols, block_rows
+                ).astype(np.float32)
+
+                nodata = ds.GetRasterBand(band_num).GetNoDataValue()
+                if nodata is not None:
+                    data = np.where(data == nodata, np.nan, data)
+
+                block_stack.append(data)
+                ds = None
+
+            # Создаем 3D массив
+            block_3d = np.stack(block_stack, axis=0)
+
+            # Вычисляем нужную статистику
+            if composite_type == 'range':
+                # Размах (max - min)
+                result = np.nanmax(block_3d, axis=0) - np.nanmin(block_3d, axis=0)
+            elif composite_type == 'std':
+                # Стандартное отклонение
+                result = np.nanstd(block_3d, axis=0)
+            elif composite_type == 'coefficient_of_variation':
+                # Коэффициент вариации (std/mean) * 100
+                mean_vals = np.nanmean(block_3d, axis=0)
+                std_vals = np.nanstd(block_3d, axis=0)
+                result = np.divide(std_vals, mean_vals,
+                                  out=np.full_like(std_vals, np.nan),
+                                  where=mean_vals > 0) * 100
+            elif composite_type == 'difference_sum':
+                # Сумма абсолютных разностей последовательных снимков
+                total_diff = np.zeros((block_rows, cols), dtype=np.float32)
+                for i in range(len(block_stack) - 1):
+                    diff = np.abs(block_stack[i+1] - block_stack[i])
+                    total_diff += np.nan_to_num(diff, nan=0)
+                result = total_diff / (len(block_stack) - 1)  # Средняя разность
+            else:
+                modeladmin.message_user(request, f"Неизвестный тип композита: {composite_type}", level=messages.ERROR)
+                ds1 = None
+                return False
+
+            # Заменяем NaN на NoData
+            result = np.nan_to_num(result, nan=-9999)
+
+            # Записываем блок
+            out_bands[band_idx].WriteArray(result, 0, y_start)
+
+        progress.update(modeladmin, request)
+        # Очищаем память
+        del block_stack, block_3d, result
+
+    out_ds.FlushCache()
+    ds1 = None
+    out_ds = None
+#    modeladmin.message_user(request, f"\nКомпозит типа '{composite_type}' сохранён в {output_path}", level=messages.SUCCESS)
+    return True
+
+# Примеры использования
+#file_list = sorted(glob.glob("sentinel2_*.tif"))
+
+# 1. Размах по временному ряду
+#advanced_temporal_composite(file_list, "range_composite.tif", bands=[1,2,3], composite_type='range', block_size=256)
+
+# 2. Стандартное отклонение
+#advanced_temporal_composite(file_list, "std_composite.tif",  bands=[1], composite_type='std', block_size=256)
+
+# 3. Коэффициент вариации (показывает относительную изменчивость)
+#advanced_temporal_composite(file_list, "cv_composite.tif", bands=[1], composite_type='coefficient_of_variation', block_size=256)
+
+
+'''
+def temporal_difference_composite_row(modeladmin, request, input_files, output_path, resampl, band=2, block_size=256):
+    """
+    Вычисляет разность между последовательными снимками временного ряда.
+    Для каждого пикселя: сумма абсолютных разностей соседних временных срезов
+    """
+    if len(input_files) < 2:
+        modeladmin.message_user(request, f"Нужно минимум 2 файла для вычисления разностей", level=messages.ERROR)
+        return False
+
+    # Получаем метаданные
+    path1 = input_files[0]
+    ds1 = gdal.Open(path1)
+    cols = ds1.RasterXSize
+    rows = ds1.RasterYSize
+    geotransform = ds1.GetGeoTransform()
+    projection = ds1.GetProjection()
+
+    # Проверка файлов на соответствие размеров, проекции, охвата и выполнение ресэмлинга
+    for i in range(1, len(input_files)):
+        if resampl:
+            reproject_to_match(input_files[i], f'resample{i}.tif', path1)
+            input_files[i] = f'resample{i}.tif'
+        else:
+            ds2 = gdal.Open(input_files[i])
+            # Проверяем совпадение размеров, проекции и геотрансформации
+            if ds1.RasterXSize != ds2.RasterXSize or ds1.RasterYSize != ds2.RasterYSize:
+                modeladmin.message_user(request, f"Размеры растров не совпадают, включите 'Выполнить ресемплинг'", level=messages.ERROR)
+                ds1 = None
+                ds2 = None
+                return False
+            if ds1.GetProjection() != ds2.GetProjection():
+                modeladmin.message_user(request, f"Проекции растров не совпадают, включите 'Выполнить ресемплинг'", level=messages.ERROR)
+                ds1 = None
+                ds2 = None
+                return False
+            if geotransform != ds2.GetGeoTransform():
+                modeladmin.message_user(request, f"Предупреждение: геотрансформации различаются, будет использована трансформация первого файла", level=messages.WARNING)
+            ds2 = None
+
+    # Создаем выходной файл
+    driver = gdal.GetDriverByName('GTiff')
+    out_ds = driver.Create(
+        output_path, cols, rows, 1,
+        gdal.GDT_Byte,
+        options=['COMPRESS=LZW', 'TILED=YES', 'BIGTIFF=IF_SAFER']
+    )
+    out_ds.SetGeoTransform(geotransform)
+    out_ds.SetProjection(projection)
+    out_band = out_ds.GetRasterBand(1)
+    out_band.SetNoDataValue(-9999)
+
+    # Обрабатываем блоками
+    for y_start in range(0, rows, block_size):
+        y_end = min(y_start + block_size, rows)
+        block_rows = y_end - y_start
+
+        print(f"Обработка строк {y_start}-{y_end} из {rows}")
+
+        # Читаем все файлы для текущего блока
+        block_data = []
+        no_data_values = []
+
+        for file_path in input_files:
+            ds = gdal.Open(file_path)
+            data = ds.GetRasterBand(band).ReadAsArray(0, y_start, cols, block_rows).astype(np.float32)
+            nodata = ds.GetRasterBand(band).GetNoDataValue()
+
+            if nodata is not None:
+                data = np.where(data == nodata, np.nan, data)
+
+            block_data.append(data)
+            no_data_values.append(nodata)
+            ds = None
+
+        # Вычисляем сумму абсолютных разностей между последовательными снимками
+        total_diff = np.zeros((block_rows, cols), dtype=np.float32)
+        valid_pixel_count = np.zeros((block_rows, cols), dtype=np.float32)
+
+        for i in range(len(block_data) - 1):
+            diff = np.abs(block_data[i+1] - block_data[i])
+            total_diff += np.nan_to_num(diff, nan=0)
+            valid_mask = ~(np.isnan(block_data[i]) | np.isnan(block_data[i+1]))
+            valid_pixel_count += valid_mask.astype(np.float32)
+
+        # Нормализуем (средняя разность)
+        avg_diff = np.divide(total_diff, valid_pixel_count,
+                            out=np.full_like(total_diff, -9999),
+                            where=valid_pixel_count > 0)
+
+        avg_diff = np.nan_to_num(avg_diff, nan=-9999)
+
+        # Записываем блок
+        out_band.WriteArray(avg_diff, 0, y_start)
+
+        # Очищаем память
+        del block_data, total_diff, valid_pixel_count, avg_diff
+
+    out_ds.FlushCache()
+    ds1 = None
+    out_ds = None
+    print(f"Композит последовательных разностей сохранён в {output_path}")
+    return True
+
+
+def temporal_range_composite_blockwise(modeladmin, request, input_files, output_path, resampl, band=2, block_size=256):
+    """
+    Вычисление размаха (max - min) по временному ряду с поблочной обработкой
+
+    Parameters:
+    input_files (list): Список входных файлов
+    output_path (str): Путь для сохранения результата
+    band (int): Номер полосы (1-based)
+    block_size (int): Размер блока для обработки (строк)
+    """
+    if not input_files:
+        modeladmin.message_user(request, f"Список файлов пуст", level=messages.ERROR)
+        return False
+
+    # Открываем первый файл для метаданных
+    path1 = input_files[0]
+    ds1 = gdal.Open(path1)
+    cols = ds1.RasterXSize
+    rows = ds1.RasterYSize
+    geotransform = ds1.GetGeoTransform()
+    projection = ds1.GetProjection()
+
+    for i in range(1, len(input_files)): # Проверка файлов на соответствие и ресэмлинг
+        if resampl:
+            reproject_to_match(input_files[i], f'resample{i}.tif', path1)
+            input_files[i] = f'resample{i}.tif'
+        else:
+            ds2 = gdal.Open(input_files[i])
+            # Проверяем совпадение размеров, проекции и геотрансформации
+            if ds1.RasterXSize != ds2.RasterXSize or ds1.RasterYSize != ds2.RasterYSize:
+                modeladmin.message_user(request, f"Размеры растров не совпадают, включите 'Выполнить ресемплинг'", level=messages.ERROR)
+                ds1 = None
+                ds2 = None
+                return False
+            if ds1.GetProjection() != ds2.GetProjection():
+                modeladmin.message_user(request, f"Проекции растров не совпадают, включите 'Выполнить ресемплинг'", level=messages.ERROR)
+                ds1 = None
+                ds2 = None
+                return False
+            if geotransform != ds2.GetGeoTransform():
+                modeladmin.message_user(request, f"Предупреждение: геотрансформации различаются, будет использована трансформация первого файла", level=messages.WARNING)
+            ds2 = None
+
+    # Создаем выходной файл
+    driver = gdal.GetDriverByName('GTiff')
+    out_ds = driver.Create(
+        output_path, cols, rows, 1,
+        gdal.GDT_Byte,
+        options=['COMPRESS=LZW', 'TILED=YES']
+    )
+    out_ds.SetGeoTransform(geotransform)
+    out_ds.SetProjection(projection)
+    out_band = out_ds.GetRasterBand(1)
+    out_band.SetNoDataValue(-9999)
+
+    # Обрабатываем построчно блоками
+    for y_start in range(0, rows, block_size):
+        y_end = min(y_start + block_size, rows)
+        block_rows = y_end - y_start
+
+        print(f"Обработка строк {y_start}-{y_end} из {rows}")
+
+        # Инициализируем массивы для текущего блока
+        block_stack = []
+        block_info = []  # Для хранения NoData значений
+
+        # Читаем один блок из каждого файла
+        for file_idx, file_path in enumerate(input_files):
+            ds = gdal.Open(file_path)
+            data = ds.GetRasterBand(band).ReadAsArray(
+                0, y_start, cols, block_rows
+            ).astype(np.float32)
+
+            nodata = ds.GetRasterBand(band).GetNoDataValue()
+            if nodata is not None:
+                # Создаем маску для NoData
+                data = np.where(data == nodata, np.nan, data)
+
+            block_stack.append(data)
+            block_info.append(nodata)
+            ds = None
+
+        # Создаем 3D массив для блока (время, y, x)
+        block_3d = np.stack(block_stack, axis=0)
+
+        # Вычисляем размах (max - min) для каждого пикселя блока
+        max_vals = np.nanmax(block_3d, axis=0)
+        min_vals = np.nanmin(block_3d, axis=0)
+        range_vals = max_vals - min_vals
+
+        # Заменяем NaN на NoData
+        range_vals = np.nan_to_num(range_vals, nan=-9999)
+
+        # Записываем блок
+        out_band.WriteArray(range_vals, 0, y_start)
+
+        # Очищаем память
+        del block_stack, block_3d, max_vals, min_vals, range_vals
+
+    out_ds.FlushCache()
+    ds1 = None
+    out_ds = None
+    print(f"Композит размаха сохранён в {output_path}")
+    return True
+'''
