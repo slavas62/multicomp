@@ -36,7 +36,7 @@ class McbuilderConfig(AppConfig):
             mad.message_user(req, f"Список файлов исходных данных пуст. Выберите папку с данными.", level=messages.ERROR)
             return False
 
-        if not resamling_files_as_first(input_files, obj.resampl): # проверка необходимости проведения ресэмплинга
+        if not resamling_files_as_first(input_files, obj.resampl): # проверка необходимости проведения ресэмплинга и ресэмплинг по данным первого файла
             return False
 
         source_folder = obj.files_folder.name  # Папка результата
@@ -418,26 +418,25 @@ def advanced_temporal_composite(input_files, output_path, bands=None, composite_
             block_3d = np.stack(block_stack, axis=0)
 
             # Вычисляем нужную статистику
-            if composite_type == 'range':
+            if composite_type == 'range':                      # Размах по временному ряду
                 # Размах (max - min)
                 result = np.nanmax(block_3d, axis=0) - np.nanmin(block_3d, axis=0)
-            elif composite_type == 'std':
+            elif composite_type == 'std':                      # Стандартное отклонение
                 # Стандартное отклонение
                 result = np.nanstd(block_3d, axis=0)
-            elif composite_type == 'coefficient_of_variation':
+            elif composite_type == 'coefficient_of_variation': # Показывает относительную изменчивость
                 # Коэффициент вариации (std/mean) * 100
                 mean_vals = np.nanmean(block_3d, axis=0)
                 std_vals = np.nanstd(block_3d, axis=0)
                 result = np.divide(std_vals, mean_vals,
                                   out=np.full_like(std_vals, np.nan),
                                   where=mean_vals > 0) * 100
-            elif composite_type == 'difference_sum':
-                # Сумма абсолютных разностей последовательных снимков
+            elif composite_type == 'difference_sum':           # Сумма абсолютных разностей последовательных снимков
                 total_diff = np.zeros((block_rows, cols), dtype=np.float32)
                 for i in range(len(block_stack) - 1):
                     diff = np.abs(block_stack[i+1] - block_stack[i])
                     total_diff += np.nan_to_num(diff, nan=0)
-                result = total_diff / (len(block_stack) - 1)  # Средняя разность
+                result = total_diff / (len(block_stack) - 1)   # Средняя абсолютная разность
             else:
                 mad.message_user(req, f"Неизвестный тип композита: {composite_type}", level=messages.ERROR)
                 ds1 = None
@@ -458,12 +457,3 @@ def advanced_temporal_composite(input_files, output_path, bands=None, composite_
     out_ds = None
 #    mad.message_user(req, f"\nКомпозит типа '{composite_type}' сохранён в {output_path}", level=messages.SUCCESS)
     return True
-
-# Примеры использования
-#file_list = sorted(glob.glob("sentinel2_*.tif"))
-# 1. Размах по временному ряду
-#advanced_temporal_composite(file_list, "range_composite.tif", bands=[1,2,3], composite_type='range', block_size=256)
-# 2. Стандартное отклонение
-#advanced_temporal_composite(file_list, "std_composite.tif",  bands=[1], composite_type='std', block_size=256)
-# 3. Коэффициент вариации (показывает относительную изменчивость)
-#advanced_temporal_composite(file_list, "cv_composite.tif", bands=[1], composite_type='coefficient_of_variation', block_size=256)
