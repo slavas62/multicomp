@@ -27,7 +27,7 @@ urlpatterns = [
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 # Изменяем заголовки микросервиса
-admin.site.site_header = "Микросервис мультивременных композитов (версия 1.0.0)"  # Заголовок админки вверху
+admin.site.site_header = "Микросервис мультивременных композитов (версия 1.0.1)"  # Заголовок админки вверху
 admin.site.index_title = "Добро пожаловать в Микросервис" # Заголовок на главной странице админки
 admin.site.site_title = "MultiComp"             # Заголовок во вкладке браузера
 

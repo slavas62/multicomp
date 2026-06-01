@@ -36,9 +36,8 @@ class McbuilderConfig(AppConfig):
             mad.message_user(req, f"Список файлов исходных данных пуст. Выберите папку с данными.", level=messages.ERROR)
             return False
 
-        if not resamling_files_as_first(input_files, obj.resampl):
+        if not resamling_files_as_first(input_files, obj.resampl): # проверка необходимости проведения ресэмплинга
             return False
-
 
         source_folder = obj.files_folder.name  # Папка результата
 
@@ -113,7 +112,7 @@ def get_filenames_by_folder_name(folder):
 #        indices = np.argsort(filenames)        # массив отсортированных индексов массива filenames (сортировка индексов по возрастанию имен файлов)
 
         return [filepath[i] for i in indices]
-    except folder.DoesNotExist:
+    except:
         return []
 
 gdal.UseExceptions()  # чтобы видеть ошибки GDAL
