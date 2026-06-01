@@ -5,16 +5,18 @@ from .models import Mcbuilder  # Импорт модели
 from django.contrib import messages
 from django.utils.html import format_html
 
-from filer.models import Folder
+from filer.models import Folder, ThumbnailOption
 from filer.admin.folderadmin import FolderAdmin
 
 import os
 
 # *** Задаем новые настройки FILER ***
-
+try:                          # Отменяем отображение в админке стандартной модели "Опции миниатюры"
+    admin.site.unregister(ThumbnailOption)
+except admin.sites.NotRegistered:
+    pass
 
 admin.site.unregister(Folder) # Отменяем стандартную регистрацию, чтобы задать свои настройки FILER
-
 class CustomFolderAdmin(FolderAdmin):
 
     def get_queryset(self, request):
@@ -31,13 +33,10 @@ class CustomFolderAdmin(FolderAdmin):
 
 Folder._meta.verbose_name = "Папка с исходниками" # Переименовываем названия в админке FILER
 Folder._meta.verbose_name_plural = "Папки с исходниками"
-
 admin.site.register(Folder, CustomFolderAdmin)
 
 
-
 # *** Управление в админке запуском функции создания композита для выбранного в списке ***
-
 def run_script_create_composit(modeladmin, request, queryset):
     from django.apps import apps
     
@@ -51,20 +50,17 @@ def run_script_create_composit(modeladmin, request, queryset):
         if obj.builded:
             modeladmin.message_user(request, f"Композит {obj.mcfile} успешно создан.", level=messages.SUCCESS)
         else:
-            modeladmin.message_user(request, f"Ошибка создания композита {obj.mcfile}.", level=messages.ERROR)
+            modeladmin.message_user(request, f"Ошибка создания композита!", level=messages.ERROR)
             pass
-
         obj.save()
-    
-
+# Удаление папки исходных данных из параметров создания композита
 def run_clear_folder_field(modeladmin, request, queryset):
     queryset.update(files_folder=None)
     queryset.update(builded=False)
     queryset.update(mcfile=None)
 
 
-# *** Регистрируем основную модель микросервиса в админке ***
-
+# *** Регистрируем основную модель микросервиса mcbuilder в админке ***
 run_clear_folder_field.short_description = "Удалить папку данных для выбранных параметров"
 run_script_create_composit.short_description = "Запустить создание выбранных композитов"
 @admin.register(Mcbuilder)
@@ -85,17 +81,17 @@ class McbuilderAdmin(admin.ModelAdmin):
         css = {
             'all': ('mcbuilder/css/filer_widget.css',)
         }
-# Автоматическое сохранение автора
+
+# Автоматическое сохранение автора новых параметров создания композитв
     def save_model(self, request, obj, form, change):
         obj.builded = False
         obj.mcfile = None
-        if not change:                # Только при создании нового объекта
+        if not change:                  # Только при создании нового объекта
             obj.author = request.user
         super().save_model(request, obj, form, change)
-
+# Запрос данных только для зарегистрированного пользователя
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-
         if request.user.is_superuser:   # Суперпользователь видит всё
             return qs
         return qs.filter(author=request.user)
@@ -104,18 +100,14 @@ class McbuilderAdmin(admin.ModelAdmin):
         if obj is not None and not request.user.is_superuser and obj.author != request.user:   # Суперпользователь видит всё
             return False
         return super().has_change_permission(request, obj)
-
     def has_delete_permission(self, request, obj=None):
         if obj is not None and not request.user.is_superuser and obj.author != request.user:   # Суперпользователь видит всё
             return False
         return super().has_delete_permission(request, obj)
-
     def has_view_permission(self, request, obj=None):
         if obj is not None and not request.user.is_superuser and obj.author != request.user:   # Суперпользователь видит всё
             return False
         return super().has_view_permission(request, obj)
-
-
 
     def get_folder_link(self, obj):    # Ссылка на редактирование папки в виде её названия в списке композитов в админке
         if obj.files_folder:
