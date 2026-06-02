@@ -20,10 +20,17 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
+from django.views.generic.base import RedirectView
+from django.contrib.staticfiles.storage import staticfiles_storage
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('mcbuilder/', include('mcbuilder.urls')), # Все ссылки из приложения mcbuilder теперь начинаются с /mcbuilder/
     path('filer/', include('filer.urls')), # Ссылки приложения FILER начинаются с /filer/
+    path(
+        "favicon.ico",
+        RedirectView.as_view(url=staticfiles_storage.url("favicon.ico")),
+    ),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 # Изменяем заголовки микросервиса
