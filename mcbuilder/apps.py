@@ -56,7 +56,7 @@ class McbuilderConfig(AppConfig):
 #   *** Создание МНОГОВРЕМЕННОГО композита из нескольких разновременных снимков с различными методами агреации значений пикселей ***
         elif obj.method.alias == 'multitemp':
             agmet = obj.agregat # методы агрегации: 'median', 'mean', 'max', 'min'.
-            output_file = obj.author.username + '_' + source_folder + '_' + agmet + '_' + obj.method.alias + '.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
+            output_file = obj.author.username + '_' + source_folder + '_' + obj.method.alias + '_' + agmet + '.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
             created = create_multitemporal_composite(
                 input_files,
                 outdir + output_file,
@@ -74,7 +74,7 @@ class McbuilderConfig(AppConfig):
             elif obj.bands == 'blue':
                 bands = [3]
 
-            output_file = obj.author.username + '_' + source_folder + '_' + obj.bands + '_' + agmet + '_' + obj.method.alias + '.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
+            output_file = obj.author.username + '_' + source_folder + '_' + obj.method.alias + '_' + agmet + '_' + obj.bands + '.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
             created = advanced_temporal_composite(
                 input_files,
                 outdir + output_file,
