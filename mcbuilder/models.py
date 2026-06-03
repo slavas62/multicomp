@@ -30,7 +30,7 @@ class Mcbuilder(models.Model):
     ]
 
     name = models.CharField(u'Название', max_length=50, help_text=u'название мультивременного композита')
-    mcfile = models.CharField(u'Имя файла результата', null=True, blank=True, max_length=255, help_text=u'путь к файлу результата')
+    mcfile = models.CharField(u'Имя файла результата', null=True, blank=True, max_length=610, help_text=u'путь к файлу результата')
     files_folder = FilerFolderField(
         null=True,                 # Разрешить отсутствие выбора
         blank=True,                # Разрешаем пустое поле папки с файлами, для возможности добавления потом
