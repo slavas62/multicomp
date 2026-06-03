@@ -46,7 +46,7 @@ class McbuilderConfig(AppConfig):
         # Пример использования:
         # Берём самый яркий 2-ой канал (зеленый) из первого файла, снятого последним
         # и каналы 3,1  (красный и синий) из второго файла, снятого ранее
-            output_file = obj.author.username + '_' + source_folder + '_sintez_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
+            output_file = obj.author.username + '_' + source_folder + '_' + obj.method.alias + '.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
             created = composite_from_bands(
                 input_files,
                 bands1=[2],    # это будет красный канал в результирующем файле
@@ -56,25 +56,25 @@ class McbuilderConfig(AppConfig):
 #   *** Создание МНОГОВРЕМЕННОГО композита из нескольких разновременных снимков с различными методами агреации значений пикселей ***
         elif obj.method.alias == 'multitemp':
             agmet = obj.agregat # методы агрегации: 'median', 'mean', 'max', 'min'.
-            output_file = obj.author.username + '_' + source_folder + '_' + agmet + '_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
+            output_file = obj.author.username + '_' + source_folder + '_' + agmet + '_' + obj.method.alias + '.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
             created = create_multitemporal_composite(
                 input_files,
                 outdir + output_file,
                 agmet
             )
-#   *** Создание различных типов РАЗНОСТНОГО композита из нескольких разновременных снимков  с различными методами разностей значений пикселей***
+#   *** Создание различных типов РАЗНОСТНОГО композита из нескольких разновременных снимков с различными методами разностей значений пикселей ***
         elif obj.method.alias == 'differеnce':
             agmet = obj.ctypes # 'range'
-            if obj.bands == 'RGB':
+            if obj.bands == 'rgb':
                 bands = [1,2,3]
-            elif obj.bands == 'Red':
+            elif obj.bands == 'red':
                 bands = [1]
-            elif obj.bands == 'Green':
+            elif obj.bands == 'green':
                 bands = [2]
-            elif obj.bands == 'Blue':
+            elif obj.bands == 'blue':
                 bands = [3]
 
-            output_file = obj.author.username + '_' + source_folder + '_' + agmet + '_' + obj.bands + '_composite.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
+            output_file = obj.author.username + '_' + source_folder + '_' + obj.bands + '_' + agmet + '_' + obj.method.alias + '.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
             created = advanced_temporal_composite(
                 input_files,
                 outdir + output_file,
