@@ -5,10 +5,36 @@ from .models import Mcbuilder  # Импорт модели
 from django.contrib import messages
 from django.utils.html import format_html
 
+from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.models import User
+
 from filer.models import Folder, ThumbnailOption
 from filer.admin.folderadmin import FolderAdmin
 
 import os
+
+
+# *** Задаем новые настройки списка пользователей ***
+class CustomUserAdmin(UserAdmin):
+    def is_superuser_status(self, obj):      # Добавляем метод для красивого вывода статуса администратора
+        if obj.is_superuser:
+            return format_html('<span style="color: green;">✔️ Да</span>')
+        return format_html('<span style="color: red;">❌ Нет</span>')
+
+    is_superuser_status.short_description = "Администратор"
+
+    # Выводим нужные поля в списке
+    list_display = (
+        "username",
+        "email",
+        "first_name",
+        "last_name",
+        "is_superuser_status",
+    )
+# Отменяем стандартную регистрацию и регистрируем заново с кастомным классом
+admin.site.unregister(User)
+admin.site.register(User, CustomUserAdmin)
+
 
 # *** Задаем новые настройки FILER ***
 try:                          # Отменяем отображение в админке стандартной модели "Опции миниатюры"
