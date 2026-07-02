@@ -94,7 +94,7 @@ class McbuilderAdmin(admin.ModelAdmin):
     actions = [run_clear_folder_field, run_script_create_composit, ]  # Добавляем функцию запуска в список "Действий" админки
 
     list_display = ('name', 'get_folder_link', 'method', 'builded', 'geotron', 'get_result_link', 'date_created', 'author') # Поля в списке
-    list_filter = ('name', 'mcfile', 'geotron')   # Фильтры справа
+    list_filter = ('builded', 'geotron', 'author')   # Фильтры справа
     search_fields = ('name', 'mcfile') # Поиск по полям
     readonly_fields = ('author',)
     
