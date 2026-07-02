@@ -4,7 +4,6 @@ set -e
 WORKSPACE=multicomp
 
 FILE=geodata/$WORKSPACE/$1  # полный путь файла композита в папке геосервера виртуалки
-#FILE=geodata/$WORKSPACE/$1  # полный путь файла композита в папке геосервера домашнего компа
 FILENAME="${FILE##*/}"      # имя файла с расширением
 
 REST_URL=http://172.17.0.1:8080/geoserver/rest # URL геосервера и

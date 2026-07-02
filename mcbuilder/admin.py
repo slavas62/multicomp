@@ -96,7 +96,7 @@ class McbuilderAdmin(admin.ModelAdmin):
     list_display = ('name', 'get_folder_link', 'method', 'builded', 'geotron', 'get_result_link', 'date_created', 'author') # Поля в списке
     list_filter = ('builded', 'geotron', 'author')   # Фильтры справа
     search_fields = ('name', 'mcfile') # Поиск по полям
-    readonly_fields = ('author',)
+    readonly_fields = ( 'builded', 'author',)
     
     class Media:            # Подключаем JS для визуализации поля метода агрегации при выборе метода многовременного композита
         js = (

@@ -455,7 +455,7 @@ def advanced_temporal_composite(input_files, output_path, bands=None, composite_
                 result = np.divide(std_vals, mean_vals,
                                   out=np.full_like(std_vals, np.nan),
                                   where=mean_vals > 0) * 100
-            elif composite_type == 'difference_sum':           # Сумма абсолютных разностей последовательных снимков
+            elif composite_type == 'sum':           # Сумма абсолютных разностей последовательных снимков
                 total_diff = np.zeros((block_rows, cols), dtype=np.float32)
                 for i in range(len(block_stack) - 1):
                     diff = np.abs(block_stack[i+1] - block_stack[i])
