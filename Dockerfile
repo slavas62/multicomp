@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     nginx \
     supervisor \
     nano \
+    curl \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
