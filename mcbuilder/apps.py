@@ -26,6 +26,7 @@ class McbuilderConfig(AppConfig):
         req = request
 
         outdir = os.environ.get('GEOSERVER_OUTDIR_MULTICOMP', 'media/composite/')
+
         mad.message_user(req, f'Время начала расчета: {datetime.datetime.now()}', level=messages.WARNING)
         print(f'Время начала расчета: {datetime.datetime.now()}')
         print(f'Директория результата: {outdir}')
@@ -93,6 +94,29 @@ class McbuilderConfig(AppConfig):
             obj.mcfile = output_file
             mad.message_user(req, f'Время окончания расчета: {datetime.datetime.now()}', level=messages.WARNING)
             print(f'Время окончания расчета: {datetime.datetime.now()}')
+
+
+        # Публикуем слой на геосервере, подключенном к ГИП "Геотрон"
+        import subprocess
+
+        # Запуск скрипта с аргументами
+        if obj.geotron:
+            username = os.environ.get('GEOSERVER_DEFAULT_USERNAME', 'admin')
+            password = os.environ.get('GEOSERVER_DEFAULT_PASSWORD', 'geoserver')
+#            print(output_file, username + ':' + password)
+            result = subprocess.run(
+                ['bash', 'static/scripts/geotron_public.sh', output_file, username + ':' + password],
+                capture_output=False,
+                text=True
+            )
+            # Вывод результата
+            if result.returncode == 0:
+                mad.message_user(req, f'Композит {output_file} успешно опубликован на ГИП "Геотрон"!')
+            else:
+                mad.message_user(req, f'Ошибка {result.returncode} публикации композита {output_file}!', level=messages.ERROR)
+                obj.geotron = False
+#            mad.message_user(req, f'Стандартный вывод: {result.stdout}')
+#            mad.message_user(req, f'Ошибки: {result.stderr}')
 
         return obj.builded
 
