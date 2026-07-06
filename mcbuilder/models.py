@@ -18,7 +18,7 @@ class Mcbuilder(models.Model):
     METHOD_CTYPES = [         # Расширенная версия с поддержкой многополосных файлов и разными типами композитов
         ('range', 'Размах по временному ряду'),
         ('std', 'Стандартное отклонение'),
-        ('coefficient_of_variation', 'Коэффициент вариации'),
+        ('cov', 'Коэффициент вариации'),
         ('sum', 'Cумма абсолютных разностей'),
     ]
 
@@ -30,7 +30,7 @@ class Mcbuilder(models.Model):
     ]
 
     name = models.CharField(u'Название', max_length=50, help_text=u'название мультивременного композита')
-    mcfile = models.CharField(u'Имя файла результата', null=True, blank=True, max_length=610, help_text=u'путь к файлу результата')
+    mcfile = models.CharField(u'Имя файла результата', null=True, blank=True, max_length=610, help_text=u'')
     files_folder = FilerFolderField(
         null=True,                 # Разрешить отсутствие выбора
         blank=True,                # Разрешаем пустое поле папки с файлами, для возможности добавления потом
@@ -46,7 +46,7 @@ class Mcbuilder(models.Model):
     resampl = models.BooleanField(u'Выполнить ресемплинг', default=False, help_text=u'привести снимки к единой проекции, размерам, разрешению и extent')
     geotron = models.BooleanField(u'ГИП "Геотрон"', default=False, help_text=u'публикация результата на ГИП "Геотрон"')
     description = models.TextField(u'Описание', null=True, blank=True, help_text=u'описание результата')
-    builded = models.BooleanField(u'Выполнено', default=False, help_text=u'композит успешно создан')
+    builded = models.BooleanField(u'Выполнено', default=False, help_text=u'')
     author = models.ForeignKey(User, verbose_name =u'Автор', on_delete=models.CASCADE, default=1, editable=False)
 
     class Meta:

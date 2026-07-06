@@ -96,7 +96,7 @@ class McbuilderAdmin(admin.ModelAdmin):
     list_display = ('name', 'get_folder_link', 'method', 'builded', 'geotron', 'get_result_link', 'date_created', 'author') # Поля в списке
     list_filter = ('builded', 'geotron', 'author')   # Фильтры справа
     search_fields = ('name', 'mcfile') # Поиск по полям
-    readonly_fields = ( 'builded', 'author',)
+    readonly_fields = ('mcfile', 'builded', 'author',)
     
     class Media:            # Подключаем JS для визуализации поля метода агрегации при выборе метода многовременного композита
         js = (
@@ -152,7 +152,7 @@ class McbuilderAdmin(admin.ModelAdmin):
         form = super().get_form(request, obj, **kwargs)
         if obj and obj.files_folder:
             form.base_fields['files_folder'].help_text = format_html('название папки с исходниками <a href="/admin/filer/folder/{}/list"><b>' + obj.files_folder.name + '</b></a>', obj.files_folder.id)
-        if obj and obj.mcfile:
-            outdir = os.environ.get('GEOSERVER_OUTDIR_MULTICOMP', 'media/composite/')
-            form.base_fields['mcfile'].help_text = format_html('<a href="/' + outdir +'{}" target="_blank"><b>скачать файл</b></a>', obj.mcfile)
+#        if obj and obj.mcfile:
+#            outdir = os.environ.get('GEOSERVER_OUTDIR_MULTICOMP', 'media/composite/')
+#            form.base_fields['mcfile'].help_text = format_html('<a href="/' + outdir +'{}" target="_blank"><b>скачать файл</b></a>', obj.mcfile)
         return form

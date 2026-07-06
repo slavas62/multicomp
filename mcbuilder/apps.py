@@ -448,7 +448,7 @@ def advanced_temporal_composite(input_files, output_path, bands=None, composite_
             elif composite_type == 'std':                      # Стандартное отклонение
                 # Стандартное отклонение
                 result = np.nanstd(block_3d, axis=0)
-            elif composite_type == 'coefficient_of_variation': # Показывает относительную изменчивость
+            elif composite_type == 'cov': # Показывает относительную изменчивость
                 # Коэффициент вариации (std/mean) * 100
                 mean_vals = np.nanmean(block_3d, axis=0)
                 std_vals = np.nanstd(block_3d, axis=0)
