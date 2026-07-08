@@ -29,6 +29,14 @@ class Mcbuilder(models.Model):
         ('rgb', 'Все каналы RGB'),
     ]
 
+    METHOD_STRECH = [         # Метод растяжки гистограммы
+        (None, 'Без обработки'),
+        ('adaptive', 'Автоматический выбор'),
+        ('percentile', 'Растяжка по процентилям'),
+        ('minmax', 'Полный диапазон'),
+        ('std', 'Стандартное отклонение'),
+    ]
+
     name = models.CharField(u'Название', max_length=50, help_text=u'название мультивременного композита')
     mcfile = models.CharField(u'Имя файла результата', null=True, blank=True, max_length=610, help_text=u'')
     files_folder = FilerFolderField(
@@ -45,6 +53,7 @@ class Mcbuilder(models.Model):
     bands = models.CharField(u'Рабочий канал', max_length=30, choices=BANDS_COMBIN, default='Red', help_text=u'исходные каналы для создания композита')
     resampl = models.BooleanField(u'Выполнить ресемплинг', default=False, help_text=u'привести снимки к единой проекции, размерам, разрешению и extent')
     geotron = models.BooleanField(u'ГИП "Геотрон"', default=False, help_text=u'публикация результата на ГИП "Геотрон"')
+    autolevels = models.CharField(u'Метод автоконтраста', max_length=30, choices=METHOD_STRECH, default=None, null=True, blank=True, help_text=u'улучшающая обработка методами растяжки гистограммы')
     description = models.TextField(u'Описание', null=True, blank=True, help_text=u'описание результата')
     builded = models.BooleanField(u'Выполнено', default=False, help_text=u'')
     author = models.ForeignKey(User, verbose_name =u'Автор', on_delete=models.CASCADE, default=1, editable=False)

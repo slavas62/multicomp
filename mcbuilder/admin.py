@@ -74,7 +74,7 @@ def run_script_create_composit(modeladmin, request, queryset):
         result = myapp_config.mvc_build(modeladmin, request, obj)  # Вызываем функцию создания композита, которая находится в apps.py
 
         if obj.builded:
-            modeladmin.message_user(request, f"Композит {obj.mcfile} успешно создан.", level=messages.SUCCESS)
+            modeladmin.message_user(request, f"Композит {obj.mcfile} успешно создан", level=messages.SUCCESS)
         else:
             modeladmin.message_user(request, f"Ошибка создания композита!", level=messages.ERROR)
             pass

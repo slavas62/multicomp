@@ -24,11 +24,11 @@ class McbuilderConfig(AppConfig):
         global mad, req
         mad = modeladmin
         req = request
+        ext = '.tif'
 
         outdir = os.environ.get('GEOSERVER_OUTDIR_MULTICOMP', 'media/composite/')
 
         mad.message_user(req, f'Время начала расчета: {datetime.datetime.now()}', level=messages.WARNING)
-        print(f'Время начала расчета: {datetime.datetime.now()}')
         print(f'Директория результата: {outdir}')
 
         input_files = get_filenames_by_folder_name(obj.files_folder)
@@ -47,20 +47,20 @@ class McbuilderConfig(AppConfig):
         # Пример использования:
         # Берём самый яркий 2-ой канал (зеленый) из первого файла, снятого последним
         # и каналы 3,1  (красный и синий) из второго файла, снятого ранее
-            output_file = obj.author.username + '_' + source_folder + '_' + obj.method.alias + '.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
+            output_file = obj.author.username + '_' + source_folder + '_' + obj.method.alias  # "{имя папки}_{метод создания}.tif"  # Файл результата
             created = composite_from_bands(
                 input_files,
                 bands1=[2],    # это будет красный канал в результирующем файле
                 bands2=[3, 1],
-                out_path = outdir + output_file
+                out_path = outdir + output_file + ext
              )
 #   *** Создание МНОГОВРЕМЕННОГО композита из нескольких разновременных снимков с различными методами агреации значений пикселей ***
         elif obj.method.alias == 'multitemp':
             agmet = obj.agregat # методы агрегации: 'median', 'mean', 'max', 'min'.
-            output_file = obj.author.username + '_' + source_folder + '_' + obj.method.alias + '_' + agmet + '.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
+            output_file = obj.author.username + '_' + source_folder + '_' + obj.method.alias + '_' + agmet  # "{имя папки}_{метод создания}.tif"  # Файл результата
             created = create_multitemporal_composite(
                 input_files,
-                outdir + output_file,
+                outdir + output_file + ext,
                 agmet
             )
 #   *** Создание различных типов РАЗНОСТНОГО композита из нескольких разновременных снимков с различными методами разностей значений пикселей ***
@@ -75,10 +75,10 @@ class McbuilderConfig(AppConfig):
             elif obj.bands == 'blue':
                 bands = [3]
 
-            output_file = obj.author.username + '_' + source_folder + '_' + obj.method.alias + '_' + agmet + '_' + obj.bands + '.tif'  # "{имя папки}_{метод создания}.tif"  # Файл результата
+            output_file = obj.author.username + '_' + source_folder + '_' + obj.method.alias + '_' + agmet + '_' + obj.bands  # "{имя папки}_{метод создания}.tif"  # Файл результата
             created = advanced_temporal_composite(
                 input_files,
-                outdir + output_file,
+                outdir + output_file + ext,
                 bands = bands,
                 composite_type = agmet,
                 block_size = 256
@@ -89,34 +89,54 @@ class McbuilderConfig(AppConfig):
             return obj.builded
 
         obj.builded = created
+        if not created: # Выходим если при создании композита возникла ошибка
+            return obj.builded
 
-        if created:
-            obj.mcfile = output_file
-            mad.message_user(req, f'Время окончания расчета: {datetime.datetime.now()}', level=messages.WARNING)
-            print(f'Время окончания расчета: {datetime.datetime.now()}')
+        result_file = output_file + ext # Имя файла композита с расширением
 
+#   *** 1. Улучшающая обработка результата (автоуровни) ***
+        if obj.autolevels:
+            apply_autolevels_to_file(
+                outdir + output_file + ext,
+                outdir + output_file + '_ac' + ext,
+                lower_pct=2,
+                upper_pct=99,
+                block_size=256,
+                stretch_mode=obj.autolevels  # 'percentile', 'minmax', 'std', 'adaptive'
+            )
 
-        # Публикуем слой на геосервере, подключенном к ГИП "Геотрон"
+            try:
+                os.remove(outdir + output_file + ext)
+                print("Файл удалён.")
+            except FileNotFoundError:
+                print("Файл не найден — ничего удалять не нужно.")
+            except PermissionError:
+                print("Отказано в доступе.")
+
+            result_file = output_file + '_ac' + ext # Имя файла обработанного композита с расширением
+
+#   *** 2. Публикуем слой на геосервере, подключенном к ГИП "Геотрон" ***
         import subprocess
-
         # Запуск скрипта с аргументами
         if obj.geotron:
             username = os.environ.get('GEOSERVER_DEFAULT_USERNAME', 'admin')
             password = os.environ.get('GEOSERVER_DEFAULT_PASSWORD', 'geoserver')
-#            print(output_file, username + ':' + password)
             result = subprocess.run(
-                ['bash', 'static/scripts/geotron_public.sh', output_file, username + ':' + password],
+                ['bash', 'static/scripts/geotron_public.sh', result_file, username + ':' + password],
                 capture_output=False,
                 text=True
             )
             # Вывод результата
             if result.returncode == 0:
-                mad.message_user(req, f'Композит {output_file} успешно опубликован на ГИП "Геотрон"!')
+                mad.message_user(req, f'Композит {result_file} опубликован на ГИП "Геотрон"')
             else:
-                mad.message_user(req, f'Ошибка {result.returncode} публикации композита {output_file}!', level=messages.ERROR)
+                mad.message_user(req, f'Ошибка {result.returncode} публикации композита {result_file}!', level=messages.ERROR)
                 obj.geotron = False
 #            mad.message_user(req, f'Стандартный вывод: {result.stdout}')
 #            mad.message_user(req, f'Ошибки: {result.stderr}')
+
+        obj.mcfile = result_file
+        mad.message_user(req, f'Время окончания расчета: {datetime.datetime.now()}', level=messages.WARNING)
 
         return obj.builded
 
@@ -480,4 +500,190 @@ def advanced_temporal_composite(input_files, output_path, bands=None, composite_
     ds1 = None
     out_ds = None
 #    mad.message_user(req, f"\nКомпозит типа '{composite_type}' сохранён в {output_path}", level=messages.SUCCESS)
+    return True
+
+
+def apply_autolevels_to_file(input_path, output_path,
+                            lower_pct=2, upper_pct=98,
+                            block_size=512, output_dtype=None,
+                            stretch_mode='percentile'):
+    """
+    Применяет автоуровни (растяжку контраста) к существующему растровому файлу
+
+    Parameters:
+    input_path (str): Путь к входному файлу
+    output_path (str): Путь для сохранения результата
+    lower_pct (float): Нижний процентиль (по умолчанию 2)
+    upper_pct (float): Верхний процентиль (по умолчанию 98)
+    block_size (int): Размер блока для построчной обработки
+    output_dtype (int): Тип выходных данных (None - сохраняет исходный тип)
+    stretch_mode (str): 'percentile', 'minmax', 'std', 'adaptive'
+
+    Returns:
+    dict: Параметры автоуровней (min, max, lower, upper)
+    """
+
+    # Открываем входной файл
+    ds_in = gdal.Open(input_path)
+    if ds_in is None:
+        mad.message_user(req, f"Не удалось открыть файл: {input_path}", level=messages.ERROR)
+        return False
+
+    cols = ds_in.RasterXSize
+    rows = ds_in.RasterYSize
+    bands = ds_in.RasterCount
+    geotransform = ds_in.GetGeoTransform()
+    projection = ds_in.GetProjection()
+
+    # Определяем выходной тип данных
+    if output_dtype is None:
+        # Если не указан, используем исходный тип
+        in_dtype = ds_in.GetRasterBand(1).DataType
+        output_dtype = in_dtype
+        # Но если исходный тип - float, конвертируем в Byte для визуализации
+        if in_dtype in [gdal.GDT_Float32, gdal.GDT_Float64]:
+            output_dtype = gdal.GDT_Byte
+
+    # Определяем параметры для каждой полосы
+    autolevels = []
+
+    print(f"Анализ файла {input_path}...")
+    for band_idx in range(1, bands + 1):
+        band = ds_in.GetRasterBand(band_idx)
+        nodata = band.GetNoDataValue()
+
+        print(f"  Полоса {band_idx}: сбор статистики...")
+
+        # Собираем значения для вычисления автоуровней
+        all_values = []
+
+        for y_start in range(0, rows, block_size):
+            y_end = min(y_start + block_size, rows)
+            block = band.ReadAsArray(0, y_start, cols, y_end - y_start)
+
+            if nodata is not None:
+                block = np.where(block == nodata, np.nan, block)
+
+            valid = block[~np.isnan(block)]
+            if len(valid) > 0:
+                all_values.extend(valid)
+
+        if len(all_values) == 0:
+            print(f"    ВНИМАНИЕ: Нет данных для полосы {band_idx}")
+            autolevels.append((0, 255))
+            continue
+
+        all_values = np.array(all_values)
+
+        # Выбираем метод растяжки
+        if stretch_mode == 'percentile':
+            lower = np.percentile(all_values, lower_pct)
+            upper = np.percentile(all_values, upper_pct)
+        elif stretch_mode == 'minmax':
+            lower = np.min(all_values)
+            upper = np.max(all_values)
+        elif stretch_mode == 'std':
+            mean = np.mean(all_values)
+            std = np.std(all_values)
+            lower = mean - 2 * std
+            upper = mean + 2 * std
+        elif stretch_mode == 'adaptive':
+            # Адаптивный выбор
+            p2 = np.percentile(all_values, 2)
+            p98 = np.percentile(all_values, 98)
+            p50 = np.percentile(all_values, 50)
+            # Если распределение сильно сжато, используем полный диапазон
+            if (p98 - p2) < 0.01 * (np.max(all_values) - np.min(all_values)):
+                lower = np.min(all_values)
+                upper = np.max(all_values)
+            else:
+                lower = p2
+                upper = p98
+        else:
+            mad.message_user(req, f'Неизвестный режим растяжки: "{stretch_mode}"', level=messages.ERROR)
+            return False
+
+        # Гарантируем минимальный диапазон
+        if upper - lower < 1e-6:
+            print(f"    ВНИМАНИЕ: слишком малый диапазон, расширяем")
+            mean_val = np.mean(all_values)
+            std_val = np.std(all_values)
+            lower = max(mean_val - 3*std_val, np.min(all_values))
+            upper = min(mean_val + 3*std_val, np.max(all_values))
+
+            if upper - lower < 1e-6:
+                lower = np.min(all_values)
+                upper = np.max(all_values) + 1
+
+        autolevels.append((lower, upper))
+
+        print(f"    Полоса {band_idx}: min={np.min(all_values):.2f}, "
+              f"max={np.max(all_values):.2f}, "
+              f"stretch: {lower:.2f} - {upper:.2f}")
+
+    # Создаем выходной файл
+    driver = gdal.GetDriverByName('GTiff')
+    out_ds = driver.Create(
+        output_path, cols, rows, bands,
+        output_dtype,
+        options=['COMPRESS=LZW', 'TILED=YES']
+    )
+    out_ds.SetGeoTransform(geotransform)
+    out_ds.SetProjection(projection)
+
+    # Применяем автоуровни
+    for band_idx, (lower, upper) in enumerate(autolevels, 1):
+        in_band = ds_in.GetRasterBand(band_idx)
+        out_band = out_ds.GetRasterBand(band_idx)
+        nodata = in_band.GetNoDataValue()
+        out_nodata = 0 if output_dtype == gdal.GDT_Byte else -9999
+        out_band.SetNoDataValue(out_nodata)
+
+        # Определяем выходной диапазон
+        if output_dtype == gdal.GDT_Byte:
+            target_min, target_max = 0, 255
+        else:
+            target_min, target_max = np.min(all_values), np.max(all_values)
+
+        total_blocks = (rows + block_size - 1) // block_size
+
+        for block_idx, y_start in enumerate(range(0, rows, block_size)):
+            y_end = min(y_start + block_size, rows)
+            block = in_band.ReadAsArray(0, y_start, cols, y_end - y_start).astype(np.float32)
+
+            if nodata is not None:
+                block = np.where(block == nodata, np.nan, block)
+
+            # Применяем растяжку
+            if upper > lower:
+                stretched = (block - lower) / (upper - lower) * (target_max - target_min) + target_min
+            else:
+                stretched = np.full_like(block, (target_min + target_max) / 2)
+
+            # Обрезаем до допустимого диапазона
+            stretched = np.clip(stretched, target_min, target_max)
+
+            # Заменяем NaN на NoData
+            stretched = np.nan_to_num(stretched, nan=out_nodata)
+
+            # Конвертируем в нужный тип
+            if output_dtype == gdal.GDT_Byte:
+                stretched = stretched.astype(np.uint8)
+            elif output_dtype == gdal.GDT_UInt16:
+                stretched = stretched.astype(np.uint16)
+            elif output_dtype == gdal.GDT_Int16:
+                stretched = stretched.astype(np.int16)
+
+            # Записываем блок
+            out_band.WriteArray(stretched, 0, y_start)
+
+            if (block_idx + 1) % 10 == 0 or block_idx + 1 == total_blocks:
+                print(f"  Полоса {band_idx}: блок {block_idx+1}/{total_blocks}")
+
+    out_ds.FlushCache()
+    out_ds = None
+    ds_in = None
+
+    mad.message_user(req, f'Выполнено автоконтрастирование композита методом "{stretch_mode}"', level=messages.SUCCESS)
+
     return True
