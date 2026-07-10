@@ -37,6 +37,13 @@ class Mcbuilder(models.Model):
         ('std', 'Стандартное отклонение'),
     ]
 
+    METHOD_THRESHOLD = [         # Методы порогового композита
+        ('max', 'Максимальная разность по каналам'),
+        ('mean', 'Средняя абсолютная разность'),
+        ('euclidean', 'Евклидово расстояние в пространстве каналов'),
+        ('sum', 'Сумма абсолютных разностей (SAD)'),
+    ]
+
     name = models.CharField(u'Название', max_length=50, help_text=u'название мультивременного композита')
     mcfile = models.CharField(u'Имя файла результата', null=True, blank=True, max_length=610, help_text=u'')
     files_folder = FilerFolderField(
@@ -50,6 +57,8 @@ class Mcbuilder(models.Model):
     method = models.ForeignKey(Mcmethod, verbose_name =u'Методы МВК', default=4, on_delete=models.PROTECT)
     agregat = models.CharField(u'Метод агрегации', max_length=10, choices=METHOD_CHOICES, default='median', help_text=u'для многовременного композита')
     ctypes = models.CharField(u'Тип композита', max_length=30, choices=METHOD_CTYPES, default='range', help_text=u'с поддержкой многоканальных файлов')
+    metthresh = models.CharField(u'Метод вычисления разности', max_length=50, choices=METHOD_THRESHOLD, default='max', help_text=u'Пороговое обнаружение изменений для многоканальных данных')
+    threshold = models.PositiveIntegerField(u'Пороговое значение', default=0, blank=True, help_text=u'если равно 0, то порог расчитывается автоматически')
     bands = models.CharField(u'Рабочий канал', max_length=30, choices=BANDS_COMBIN, default='Red', help_text=u'исходные каналы для создания композита')
     resampl = models.BooleanField(u'Выполнить ресемплинг', default=False, help_text=u'привести снимки к единой проекции, размерам, разрешению и extent')
     geotron = models.BooleanField(u'ГИП "Геотрон"', default=False, help_text=u'публикация результата на ГИП "Геотрон"')

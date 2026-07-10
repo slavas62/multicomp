@@ -26,6 +26,22 @@ window.addEventListener('load', function() {
                     ctypesField.hide();
                     bandsField.hide();
                 }
+
+				var metthreshField = $('.field-metthresh'); // Находим контейнер поля metthresh (обычно div.field-имя_поля)
+				var thresholdField = $('.field-threshold'); // Находим контейнер поля threshold (обычно div.field-имя_поля)
+				var bandsField = $('.field-bands');   // Находим контейнер поля bands (обычно div.field-имя_поля)
+				var autolevelsField = $('.field-autolevels');
+                if (selectedStatus === 'Пороговый композит') {
+					metthreshField.show();
+					thresholdField.show();
+                    bandsField.show();
+					autolevelsField.hide();
+                } else {
+					metthreshField.hide();
+					thresholdField.hide();
+                    bandsField.hide();
+					autolevelsField.show();
+                }
             }
 
             toggleAgregatField();  // Запускаем при загрузке

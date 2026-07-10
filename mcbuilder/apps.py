@@ -83,6 +83,27 @@ class McbuilderConfig(AppConfig):
                 composite_type = agmet,
                 block_size = 256
             )
+        elif obj.method.alias == 'threshold':
+            agmet = obj.metthresh
+            threshold=obj.threshold
+            if obj.bands == 'rgb':
+                bands = [1,2,3]
+            elif obj.bands == 'red':
+                bands = [1]
+            elif obj.bands == 'green':
+                bands = [2]
+            elif obj.bands == 'blue':
+                bands = [3]
+
+            output_file = obj.author.username + '_' + source_folder + '_' + obj.method.alias + '_' + agmet + '_' + obj.bands  # "{имя папки}_{метод создания}.tif"  # Файл результата
+            created = detect_changes_blockwise(
+                input_files,
+                outdir + output_file + ext,
+                bands=bands,
+                threshold=threshold,
+                block_size=512,
+                aggregation=agmet # euclidean, max, sum, mean
+            )       
         else:
             mad.message_user(req, f"Этот метод пока не поддерживается: {obj.method.name}", level=messages.ERROR)
             obj.builded = False
@@ -221,6 +242,7 @@ def resamling_files_as_first(input_files, resampl):
                 mad.message_user(req, f"Предупреждение: геотрансформации различаются, будет использована трансформация первого файла", level=messages.WARNING)
                 ds2 = None
     return True
+
 
 
 # *** Синтезированный композит по трем каналам из двух разных снимков ***
@@ -502,6 +524,203 @@ def advanced_temporal_composite(input_files, output_path, bands=None, composite_
 #    mad.message_user(req, f"\nКомпозит типа '{composite_type}' сохранён в {output_path}", level=messages.SUCCESS)
     return True
 
+
+
+def detect_changes_blockwise(input_files, output_path,
+    bands=[1, 2, 3],  # какие каналы использовать (1-based индексы)
+    threshold=50,     # порог для изменений
+    block_size=512,   # размер блока (512x512 пикселей)
+    aggregation='max' # как объединять каналы: 'max', 'mean', 'sum'
+):
+    """
+    Поблочное обнаружение изменений для многоканальных изображений
+    
+    Алгоритм:
+    1. Разбивает изображение на блоки
+    2. Для каждого блока читает все указанные каналы из обоих снимков
+    3. Вычисляет разность по каждому каналу
+    4. Агрегирует разности в одну карту изменений
+    5. Применяет порог
+    6. Записывает результат
+    """
+    
+    # Открываем оба датасета
+    ds1 = gdal.Open(input_files[0])
+    ds2 = gdal.Open(input_files[1])
+    
+    if ds1 is None or ds2 is None:
+        raise FileNotFoundError("Не удалось открыть одно из изображений")
+    
+    # Получаем информацию о размерах и проекции
+    cols = ds1.RasterXSize
+    rows = ds1.RasterYSize
+    geotransform = ds1.GetGeoTransform()
+    projection = ds1.GetProjection()
+    
+    # Проверяем, что размеры совпадают
+    if ds2.RasterXSize != cols or ds2.RasterYSize != rows:
+        mad.message_user(req, f"Размеры растров не совпадают, включите 'Выполнить ресемплинг'", level=messages.ERROR)
+        ds1 = None
+        ds2 = None
+        return False
+    
+    # Проверяем, что каналы существуют
+    n_bands = ds1.RasterCount
+    for band in bands:
+        if band > n_bands:
+            mad.message_user(req, f"Канал {band} отсутствует (каналов всего {n_bands})", level=messages.ERROR)
+            ds1 = None
+            ds2 = None
+            return False
+    
+    # Создаем выходной файл
+    driver = gdal.GetDriverByName('GTiff')
+    out_ds = driver.Create(
+        output_path, cols, rows, 1, gdal.GDT_Byte  # 1 канал, 8-bit
+    )
+    out_ds.SetGeoTransform(geotransform)
+    out_ds.SetProjection(projection)
+    out_band = out_ds.GetRasterBand(1)
+    
+    print(f"Размер изображения: {rows} x {cols}")
+    print(f"Обработка каналов: {bands}")
+    print(f"Размер блока: {block_size}x{block_size}")
+    print("Начинается поблочная обработка...")
+    
+    # Счетчики для прогресса
+    total_blocks = ((rows + block_size - 1) // block_size) * ((cols + block_size - 1) // block_size)
+    start_time = time.time()
+    
+    # Цикл по блокам
+    for y in range(0, rows, block_size):
+        # Вычисляем высоту текущего блока (последний может быть меньше)
+        ysize = min(block_size, rows - y)
+        
+        for x in range(0, cols, block_size):
+            xsize = min(block_size, cols - x)
+            
+            # --- 1. Читаем все каналы для первого изображения ---
+            img1_block = []
+            for band_idx in bands:
+                band = ds1.GetRasterBand(band_idx)
+                data = band.ReadAsArray(x, y, xsize, ysize).astype(np.float32)
+                img1_block.append(data)
+            
+            # --- 2. Читаем все каналы для второго изображения ---
+            img2_block = []
+            for band_idx in bands:
+                band = ds2.GetRasterBand(band_idx)
+                data = band.ReadAsArray(x, y, xsize, ysize).astype(np.float32)
+                img2_block.append(data)
+            
+            # --- 3. Вычисляем разности для всех каналов ---
+            # Вариант A: Евклидово расстояние (эффективно, если каналы сравнимы)
+            # Вариант B: Сумма абсолютных разностей
+            # Вариант C: Максимальная разность по каналам
+            
+            if aggregation == 'euclidean':
+                # Евклидово расстояние в пространстве каналов
+                squared_diff_sum = np.zeros((ysize, xsize), dtype=np.float32)
+                for band1, band2 in zip(img1_block, img2_block):
+                    squared_diff_sum += (band1 - band2) ** 2
+                diff_block = np.sqrt(squared_diff_sum)
+                
+            elif aggregation == 'sum':
+                # Сумма абсолютных разностей (SAD)
+                diff_block = np.zeros((ysize, xsize), dtype=np.float32)
+                for band1, band2 in zip(img1_block, img2_block):
+                    diff_block += np.abs(band1 - band2)
+                    
+            elif aggregation == 'max':
+                # Максимальная разность по каналам (изменение в любом канале)
+                diff_block = np.zeros((ysize, xsize), dtype=np.float32)
+                for band1, band2 in zip(img1_block, img2_block):
+                    diff_block = np.maximum(diff_block, np.abs(band1 - band2))
+                    
+            elif aggregation == 'mean':
+                # Средняя абсолютная разность
+                diff_block = np.zeros((ysize, xsize), dtype=np.float32)
+                for band1, band2 in zip(img1_block, img2_block):
+                    diff_block += np.abs(band1 - band2)
+                diff_block /= len(bands)
+            
+            # --- 4. Применяем порог ---
+           # change_block = np.zeros((ysize, xsize), dtype=np.uint8)
+           # change_block[diff_block > threshold] = 255  # 255 для визуализации
+            
+            # --- 5. Записываем блок ---
+            out_band.WriteArray(diff_block, x, y)
+
+    threshold = threshold_color_table(out_band, threshold)
+    print(f"threshold: {threshold}")
+
+    out_band.FlushCache()
+    ds1 = None
+    ds2 = None
+    out_ds = None
+    
+    elapsed = time.time() - start_time
+    print(f"Обработка завершена за {elapsed:.2f} секунд")
+    print(f"Результат сохранен в: {output_path}")
+
+    return True
+
+
+def threshold_color_table(band, threshold):
+    """Принимает bad, делит значения по порогу (arr или 255)
+    и накладывает индексированную цветовую палитру.
+    """
+    # 1. Бинаризация данных через NumPy
+    arr = band.ReadAsArray()
+    if arr is None:
+        raise RuntimeError("Не удалось прочитать массив данных из растра")
+        return False
+
+    if threshold == 0:
+        threshold = round(mean_std_threshold(arr))
+
+    arr = np.where(arr > threshold, 255, arr).astype(np.uint8)
+
+    # Записываем измененный массив обратно в канал
+    band.WriteArray(arr)
+
+    # 2. Создание и настройка таблицы цветов
+    color_table = gdal.ColorTable()
+    color_table.SetColorEntry(0, (0, 0, 0, 255))          # 0 -> Черный
+    color_table.SetColorEntry(255, (255, 0, 0, 255))  # 255 -> Белый
+
+    # Заполняем промежуточные индексы серым цветом
+    for i in range(1, 255-1):
+        color_table.SetColorEntry(i, (i, i, i, 255))
+
+    '''
+    # 2. Формируем color table как диапазоны "радуги" (значения от 0 до 255)
+    # От синего к зеленому
+    color_table.CreateColorRamp(0, (0, 0, 255), 64, (0, 255, 255))
+    # От зеленого к желтому
+    color_table.CreateColorRamp(64, (0, 255, 255), 128, (0, 255, 0))
+    # От желтого к красному
+    color_table.CreateColorRamp(128, (0, 255, 0), 192, (255, 255, 0))
+    # От красного к фиолетовому
+    color_table.CreateColorRamp(192, (255, 255, 0), 254, (255, 0, 255))
+    '''
+    # 3. Применяем палитру и тип интерпретации цвета
+    band.SetRasterColorTable(color_table)
+    band.SetRasterColorInterpretation(gdal.GCI_PaletteIndex)
+
+    return threshold
+
+@staticmethod
+def mean_std_threshold(data: np.ndarray, factor: float = 2.0) -> float:
+    """
+    Расчет порога по результату = среднее + factor * стандартное отклонение.
+    """
+    data = data[~np.isnan(data)]
+    if len(data) == 0:
+        return 0.0
+        
+    return float(np.mean(data) + factor * np.std(data))
+   
 
 def apply_autolevels_to_file(input_path, output_path,
                             lower_pct=2, upper_pct=98,
