@@ -24,6 +24,7 @@ class McbuilderConfig(AppConfig):
         global mad, req
         mad = modeladmin
         req = request
+        size_block = 512 # Определим размер блока для построчной обработки
         ext = '.tif'
 
         outdir = os.environ.get('GEOSERVER_OUTDIR_MULTICOMP', 'media/composite/')
@@ -61,7 +62,8 @@ class McbuilderConfig(AppConfig):
             created = create_multitemporal_composite(
                 input_files,
                 outdir + output_file + ext,
-                agmet
+                agmet,
+                block_size = size_block
             )
 #   *** Создание различных типов РАЗНОСТНОГО композита из нескольких разновременных снимков с различными методами разностей значений пикселей ***
         elif obj.method.alias == 'differеnce':
@@ -81,7 +83,7 @@ class McbuilderConfig(AppConfig):
                 outdir + output_file + ext,
                 bands = bands,
                 composite_type = agmet,
-                block_size = 256
+                block_size = size_block
             )
         elif obj.method.alias == 'threshold':
             agmet = obj.metthresh
@@ -99,10 +101,10 @@ class McbuilderConfig(AppConfig):
             created = detect_changes_blockwise(
                 input_files,
                 outdir + output_file + ext,
-                bands=bands,
-                threshold=threshold,
-                block_size=512,
-                aggregation=agmet # euclidean, max, sum, mean
+                bands = bands,
+                threshold = threshold,
+                block_size = size_block,
+                aggregation = agmet # euclidean, max, sum, mean
             )       
         else:
             mad.message_user(req, f"Этот метод пока не поддерживается: {obj.method.name}", level=messages.ERROR)
@@ -115,8 +117,8 @@ class McbuilderConfig(AppConfig):
 
         result_file = output_file + ext # Имя файла композита с расширением
 
-#   *** 1. Улучшающая обработка результата (автоуровни) ***
-        if obj.autolevels:
+#   *** 1. Улучшающая обработка результата (автоуровни) кроме порогового композита ***
+        if obj.autolevels and obj.method.alias != 'threshold':
             apply_autolevels_to_file(
                 outdir + output_file + ext,
                 outdir + output_file + '_ac' + ext,
@@ -307,8 +309,9 @@ def composite_from_bands(input_files, bands1, bands2, out_path, driver_name='GTi
     return True
 
 
+
 # *** Mультивременной композит из нескольких разновременных снимков с разными методами агрегации пикселей ***
-def create_multitemporal_composite(input_files, output_file, method='median'):
+def create_multitemporal_composite(input_files, output_file, method='median', block_size=512):
     """
     Создаёт мультивременной композит из списка входных растров.
     Параметры:
@@ -341,9 +344,6 @@ def create_multitemporal_composite(input_files, output_file, method='median'):
     out_ds = driver.Create(output_file, cols, rows, bands, out_dtype, options=['COMPRESS=LZW'])
     out_ds.SetProjection(projection)
     out_ds.SetGeoTransform(geotransform)
-
-    # Определим размер блока для построчной обработки (можно настроить под размер файла)
-    block_size = 256  # строк за раз
 
     # Открываем все входные файлы
     datasets = [gdal.Open(f, gdal.GA_ReadOnly) for f in input_files]
@@ -390,7 +390,6 @@ def create_multitemporal_composite(input_files, output_file, method='median'):
         ds_ref = None
         return True
 
-
 class BlockProgressBar:
     """Простой прогресс-бар для поблочной обработки"""
     def __init__(self, total_blocks):
@@ -405,6 +404,8 @@ class BlockProgressBar:
             elapsed = time.time() - self.start_time
             print(f"Прогресс: {percent:.1f}% | Обработано блоков: {self.processed_blocks}/{self.total_blocks} | Время: {elapsed:.1f}с")
 #            mad.message_user(req, f"Прогресс: {percent:.1f}% | Обработано блоков: {self.processed_blocks}/{self.total_blocks} | Время: {elapsed:.1f}с", level=messages.SUCCESS)
+
+
 
 def advanced_temporal_composite(input_files, output_path, bands=None, composite_type='range', block_size=512):
     """
@@ -581,12 +582,12 @@ def detect_changes_blockwise(input_files, output_path,
     out_ds.SetGeoTransform(geotransform)
     out_ds.SetProjection(projection)
     out_band = out_ds.GetRasterBand(1)
-    
+    '''
     print(f"Размер изображения: {rows} x {cols}")
     print(f"Обработка каналов: {bands}")
     print(f"Размер блока: {block_size}x{block_size}")
     print("Начинается поблочная обработка...")
-    
+    '''
     # Счетчики для прогресса
     total_blocks = ((rows + block_size - 1) // block_size) * ((cols + block_size - 1) // block_size)
     start_time = time.time()
@@ -651,17 +652,18 @@ def detect_changes_blockwise(input_files, output_path,
             # --- 5. Записываем блок ---
             out_band.WriteArray(diff_block, x, y)
 
+    out_ds.FlushCache()
+
     threshold = threshold_color_table(out_band, threshold)
-    print(f"threshold: {threshold}")
 
     out_band.FlushCache()
     ds1 = None
     ds2 = None
     out_ds = None
-    
+
     elapsed = time.time() - start_time
-    print(f"Обработка завершена за {elapsed:.2f} секунд")
-    print(f"Результат сохранен в: {output_path}")
+#    print(f"Обработка завершена за {elapsed:.2f} секунд")
+#    print(f"Результат сохранен в: {output_path}")
 
     return True
 
@@ -672,22 +674,23 @@ def threshold_color_table(band, threshold):
     """
     # 1. Бинаризация данных через NumPy
     arr = band.ReadAsArray()
+#    arr = normalize_to_255(arr)
+#    print(arr)
+
     if arr is None:
         raise RuntimeError("Не удалось прочитать массив данных из растра")
         return False
 
     if threshold == 0:
         threshold = round(mean_std_threshold(arr))
+    print(f"threshold: {threshold}")
 
     arr = np.where(arr > threshold, 255, arr).astype(np.uint8)
 
-    # Записываем измененный массив обратно в канал
-    band.WriteArray(arr)
-
     # 2. Создание и настройка таблицы цветов
     color_table = gdal.ColorTable()
-    color_table.SetColorEntry(0, (0, 0, 0, 255))          # 0 -> Черный
-    color_table.SetColorEntry(255, (255, 0, 0, 255))  # 255 -> Белый
+    color_table.SetColorEntry(0, (0, 0, 0, 255))      # 0 -> Черный
+    color_table.SetColorEntry(255, (255, 0, 0, 255))  # 255 -> красный
 
     # Заполняем промежуточные индексы серым цветом
     for i in range(1, 255-1):
@@ -708,6 +711,9 @@ def threshold_color_table(band, threshold):
     band.SetRasterColorTable(color_table)
     band.SetRasterColorInterpretation(gdal.GCI_PaletteIndex)
 
+    # Записываем измененный массив обратно в канал
+    band.WriteArray(arr)
+
     return threshold
 
 @staticmethod
@@ -721,6 +727,25 @@ def mean_std_threshold(data: np.ndarray, factor: float = 2.0) -> float:
         
     return float(np.mean(data) + factor * np.std(data))
    
+def normalize_to_255(image):
+    """
+    Нормирует массив изображения в диапазон [0, 255] и приводит к типу uint8.
+    """
+    # Переводим во float для точности вычислений
+    img_float = image.astype(np.float32)
+
+    img_min = img_float.min()
+    img_max = img_float.max()
+
+    # Защита от деления на ноль, если изображение одноцветное
+    if img_max == img_min:
+        return np.zeros_like(image, dtype=np.uint8)
+
+    # Линейное масштабирование
+    normalized = (img_float - img_min) * (255.0 / (img_max - img_min))
+
+    # Округление до ближайшего целого и приведение к uint8
+    return np.rint(normalized).astype(np.uint8)
 
 def apply_autolevels_to_file(input_path, output_path,
                             lower_pct=2, upper_pct=98,
