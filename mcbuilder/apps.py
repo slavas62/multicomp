@@ -49,7 +49,7 @@ class McbuilderConfig(AppConfig):
         # Берём самый яркий 2-ой канал (зеленый) из первого файла, снятого последним
         # и каналы 3,1  (красный и синий) из второго файла, снятого ранее
             output_file = obj.author.username + '_' + source_folder + '_' + obj.method.alias  # "{имя папки}_{метод создания}.tif"  # Файл результата
-            created = composite_from_bands(
+            created = sintez_composite(
                 input_files,
                 bands1=[2],    # это будет красный канал в результирующем файле
                 bands2=[3, 1],
@@ -59,7 +59,7 @@ class McbuilderConfig(AppConfig):
         elif obj.method.alias == 'multitemp':
             agmet = obj.agregat # методы агрегации: 'median', 'mean', 'max', 'min'.
             output_file = obj.author.username + '_' + source_folder + '_' + obj.method.alias + '_' + agmet  # "{имя папки}_{метод создания}.tif"  # Файл результата
-            created = create_multitemporal_composite(
+            created = multitemp_composite(
                 input_files,
                 outdir + output_file + ext,
                 agmet,
@@ -78,15 +78,16 @@ class McbuilderConfig(AppConfig):
                 bands = [3]
 
             output_file = obj.author.username + '_' + source_folder + '_' + obj.method.alias + '_' + agmet + '_' + obj.bands  # "{имя папки}_{метод создания}.tif"  # Файл результата
-            created = advanced_temporal_composite(
+            created = differеnce_composite(
                 input_files,
                 outdir + output_file + ext,
                 bands = bands,
                 composite_type = agmet,
                 block_size = size_block
             )
+#   *** Создание различных типов композита по ПОРОГОВОМУ значению из нескольких разновременных снимков с различными методами агрегации значений пикселей ***
         elif obj.method.alias == 'threshold':
-            agmet = obj.metthresh
+            agmet = obj.metthresh  # методы агрегации: 'max', 'mean', 'euclidean', 'sum'.
             threshold=obj.threshold
             if obj.bands == 'rgb':
                 bands = [1,2,3]
@@ -98,7 +99,7 @@ class McbuilderConfig(AppConfig):
                 bands = [3]
 
             output_file = obj.author.username + '_' + source_folder + '_' + obj.method.alias + '_' + agmet + '_' + obj.bands  # "{имя папки}_{метод создания}.tif"  # Файл результата
-            created = detect_changes_blockwise(
+            created = threshold_composite(
                 input_files,
                 outdir + output_file + ext,
                 bands = bands,
@@ -247,8 +248,8 @@ def resamling_files_as_first(input_files, resampl):
 
 
 
-# *** Синтезированный композит по трем каналам из двух разных снимков ***
-def composite_from_bands(input_files, bands1, bands2, out_path, driver_name='GTiff'):
+#   *** Функция создания СИНТЕЗИРОВАННОГО композита из двух разновременных снимков ***
+def sintez_composite(input_files, bands1, bands2, out_path, driver_name='GTiff'):
     """
     Создаёт мультиканальный растр, объединяя указанные каналы из двух разных файлов.
 
@@ -275,7 +276,7 @@ def composite_from_bands(input_files, bands1, bands2, out_path, driver_name='GTi
 
     # Создаём выходной растр
     driver = gdal.GetDriverByName(driver_name)
-    out_ds = driver.Create(out_path, ds1.RasterXSize, ds1.RasterYSize, num_bands, data_type)
+    out_ds = driver.Create(out_path, ds1.RasterXSize, ds1.RasterYSize, num_bands, gdal.GDT_Byte) # GDT_Byte / GDT_UInt8 = 1 (8-bit unsigned integer)
     out_ds.SetProjection(ds1.GetProjection())
     out_ds.SetGeoTransform(ds1.GetGeoTransform())
 
@@ -283,6 +284,8 @@ def composite_from_bands(input_files, bands1, bands2, out_path, driver_name='GTi
     for out_idx, band_idx in enumerate(bands1, start=1):
         src_band = ds1.GetRasterBand(band_idx)
         data = src_band.ReadAsArray()
+        if data_type != gdal.GDT_Byte:
+            data= normalize_to_255(data)
         out_band = out_ds.GetRasterBand(out_idx)
         out_band.WriteArray(data)
         # Копируем настройки NoData, если есть
@@ -295,6 +298,8 @@ def composite_from_bands(input_files, bands1, bands2, out_path, driver_name='GTi
     for out_idx, band_idx in enumerate(bands2, start=1 + offset):
         src_band = ds2.GetRasterBand(band_idx)
         data = src_band.ReadAsArray()
+        if data_type != gdal.GDT_Byte:
+            data= normalize_to_255(data)
         out_band = out_ds.GetRasterBand(out_idx)
         out_band.WriteArray(data)
         src_nodata = src_band.GetNoDataValue()
@@ -310,8 +315,8 @@ def composite_from_bands(input_files, bands1, bands2, out_path, driver_name='GTi
 
 
 
-# *** Mультивременной композит из нескольких разновременных снимков с разными методами агрегации пикселей ***
-def create_multitemporal_composite(input_files, output_file, method='median', block_size=512):
+#   *** Функция создания МНОГОВРЕМЕННОГО композита из нескольких разновременных снимков с различными методами агреации значений пикселей ***
+def multitemp_composite(input_files, output_file, method='median', block_size=512):
     """
     Создаёт мультивременной композит из списка входных растров.
     Параметры:
@@ -390,24 +395,10 @@ def create_multitemporal_composite(input_files, output_file, method='median', bl
         ds_ref = None
         return True
 
-class BlockProgressBar:
-    """Простой прогресс-бар для поблочной обработки"""
-    def __init__(self, total_blocks):
-        self.total_blocks = total_blocks
-        self.processed_blocks = 0
-        self.start_time = time.time()
-
-    def update(self):
-        self.processed_blocks += 1
-        if self.processed_blocks % 10 == 0 or self.processed_blocks == self.total_blocks:
-            percent = (self.processed_blocks / self.total_blocks) * 100
-            elapsed = time.time() - self.start_time
-            print(f"Прогресс: {percent:.1f}% | Обработано блоков: {self.processed_blocks}/{self.total_blocks} | Время: {elapsed:.1f}с")
-#            mad.message_user(req, f"Прогресс: {percent:.1f}% | Обработано блоков: {self.processed_blocks}/{self.total_blocks} | Время: {elapsed:.1f}с", level=messages.SUCCESS)
 
 
-
-def advanced_temporal_composite(input_files, output_path, bands=None, composite_type='range', block_size=512):
+#   *** Функция создания различных типов РАЗНОСТНОГО композита из нескольких разновременных снимков с различными методами разностей значений пикселей ***
+def differеnce_composite(input_files, output_path, bands=None, composite_type='range', block_size=512):
     """
     Расширенная версия с поддержкой многополосных файлов и разными типами композитов
 
@@ -456,7 +447,6 @@ def advanced_temporal_composite(input_files, output_path, bands=None, composite_
 
     # Вычисляем количество блоков
     num_blocks = (rows + block_size - 1) // block_size
-    progress = BlockProgressBar(num_blocks)
 
     # Обрабатываем каждый блок
     for y_start in range(0, rows, block_size):
@@ -515,7 +505,6 @@ def advanced_temporal_composite(input_files, output_path, bands=None, composite_
             # Записываем блок
             out_bands[band_idx].WriteArray(result, 0, y_start)
 
-        progress.update()
         # Очищаем память
         del block_stack, block_3d, result
 
@@ -527,7 +516,8 @@ def advanced_temporal_composite(input_files, output_path, bands=None, composite_
 
 
 
-def detect_changes_blockwise(input_files, output_path,
+#   *** Функция создания композита по ПОРОГОВОМУ значению из нескольких разновременных снимков с различными методами агрегации значений пикселей ***
+def threshold_composite(input_files, output_path,
     bands=[1, 2, 3],  # какие каналы использовать (1-based индексы)
     threshold=50,     # порог для изменений
     block_size=512,   # размер блока (512x512 пикселей)
@@ -669,7 +659,8 @@ def detect_changes_blockwise(input_files, output_path,
 
 
 def threshold_color_table(band, threshold):
-    """Принимает bad, делит значения по порогу (arr или 255)
+    """
+    Принимает band, делит значения по порогу (arr или 255)
     и накладывает индексированную цветовую палитру.
     """
     # 1. Бинаризация данных через NumPy
@@ -682,8 +673,10 @@ def threshold_color_table(band, threshold):
         return False
 
     if threshold == 0:
-        threshold = round(mean_std_threshold(arr))
-    print(f"threshold: {threshold}")
+#        threshold = round(mean_std_threshold(arr))
+        method = 'mean_std'
+        threshold = round(calculate_mean_threshold(arr, method=method))
+    print(f"threshold: {method} {threshold}")
 
     arr = np.where(arr > threshold, 255, arr).astype(np.uint8)
 
@@ -726,10 +719,124 @@ def mean_std_threshold(data: np.ndarray, factor: float = 2.0) -> float:
         return 0.0
         
     return float(np.mean(data) + factor * np.std(data))
-   
+
+def calculate_mean_threshold(data: np.ndarray, n_factor: float = 2.0, method='mean_std'):
+    # ========================================================================
+    # РАСЧЕТ ПОРОГА
+    # ========================================================================
+
+    # Базовые статистики
+    mean_val = np.mean(data)
+    median_val = np.median(data)
+    std_val = np.std(data)
+    mad_val = np.median(np.abs(data - median_val))
+    percentile_90 = np.percentile(data, 90)
+    percentile_95 = np.percentile(data, 95)
+
+    # Расчет порога в зависимости от метода
+    if method == 'mean_only':
+        threshold = mean_val
+    elif method == 'mean_std':
+        threshold = mean_val + n_factor * std_val
+    elif method == 'mean_median':
+        threshold = mean_val + n_factor * abs(mean_val - median_val)
+    elif method == 'mean_mad':
+        threshold = mean_val + n_factor * mad_val
+    elif method == 'mean_percentile':
+        # Используем процентиль как меру разброса
+        perc = min(95, max(80, 100 - (100 - n_factor * 10)))
+        perc_val = np.percentile(data, perc)
+        threshold = mean_val + 0.5 * (perc_val - mean_val)
+    elif method == 'mean_trimmed':
+        # Усеченное среднее (отбрасываем n_factor процентов)
+        trim = min(n_factor * 5, 25)
+        lower = np.percentile(data, trim)
+        upper = np.percentile(data, 100 - trim)
+        trimmed_data = data[(data >= lower) & (data <= upper)]
+        if len(trimmed_data) > 0:
+            threshold = np.mean(trimmed_data)
+        else:
+            threshold = mean_val
+    elif method == 'mean_weighted':
+        # Экспоненциальные веса (приоритет высоких значений)
+        sorted_data = np.sort(data)
+        n = len(sorted_data)
+        weights = np.exp(np.linspace(0, 1, n) * n_factor)
+        weighted_mean = np.average(sorted_data, weights=weights)
+        threshold = weighted_mean
+    elif method == 'mean_robust':
+        # Робастная оценка методом Хубера
+        def huber_mean(x, c=1.345):
+            mu = np.median(x)
+            for _ in range(10):
+                residuals = x - mu
+                w = np.where(np.abs(residuals) < c, 1, c / (np.abs(residuals) + 1e-10))
+                mu_new = np.sum(w * x) / (np.sum(w) + 1e-10)
+                if abs(mu_new - mu) < 1e-6:
+                    break
+                mu = mu_new
+            return mu
+
+        robust_mean = huber_mean(data)
+        robust_std = np.std(data)
+        threshold = robust_mean + n_factor * robust_std
+    elif method == 'mean_bimodal':
+        # Для бимодальных распределений
+        try:
+            from sklearn.mixture import GaussianMixture
+
+            # Ресемплинг для ускорения
+            if len(data) > 10000:
+                sample = np.random.choice(data, 10000, replace=False)
+            else:
+                sample = data
+
+            gmm = GaussianMixture(n_components=2, random_state=42)
+            gmm.fit(sample.reshape(-1, 1))
+            means = gmm.means_.flatten()
+            stds = np.sqrt(gmm.covariances_).flatten()
+            weights = gmm.weights_.flatten()
+
+            # Порог = взвешенное среднее между классами
+            threshold = np.average(means, weights=weights)
+
+        except:
+            # Если GMM не работает, используем mean_std
+            threshold = mean_val + n_factor * std_val
+    else:
+        raise ValueError(f"Неизвестный метод: {method}")
+
+    # Ограничиваем порог разумными пределами
+    threshold = np.clip(threshold, np.percentile(data, 5), np.percentile(data, 99))
+
+    # Статистика
+    stats = {
+        'method': method,
+        'n_factor': n_factor,
+        'threshold': threshold,
+        'mean': mean_val,
+        'median': median_val,
+        'std': std_val,
+        'mad': mad_val,
+        'percentile_90': percentile_90,
+        'percentile_95': percentile_95,
+        'min': np.min(data),
+        'max': np.max(data)
+    }
+
+    return threshold
+
 def normalize_to_255(image):
     """
     Нормирует массив изображения в диапазон [0, 255] и приводит к типу uint8.
+    GDT_Byte / GDT_UInt8 = 1 (8-bit unsigned integer)
+    GDT_Int8 = 14 (8-bit signed integer)
+    GDT_UInt16 = 2 (16-bit unsigned integer)
+    GDT_Int16 = 3 (16-bit signed integer)
+    GDT_UInt32 = 4 (32-bit unsigned integer)
+    GDT_Int32 = 5 (32-bit signed integer)
+    GDT_Float32 = 6 (32-bit floating point)
+    GDT_Float64 = 7 (64-bit floating point)
     """
     # Переводим во float для точности вычислений
     img_float = image.astype(np.float32)
