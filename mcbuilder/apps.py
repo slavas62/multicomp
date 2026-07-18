@@ -51,10 +51,18 @@ class McbuilderConfig(AppConfig):
             output_file = obj.author.username + '_' + source_folder + '_' + obj.method.alias  # "{имя папки}_{метод создания}.tif"  # Файл результата
             created = sintez_composite(
                 input_files,
-                bands1=[2],    # это будет красный канал в результирующем файле
-                bands2=[3, 1],
+                bands1 = [2],    # это будет красный канал в результирующем файле
+                bands2 = [3, 1],
                 out_path = outdir + output_file + ext
-             )
+            )
+#   *** Создание композита по данным NDVI из двух разновременных снимков ***
+        elif obj.method.alias == 'ndvi':
+            output_file = obj.author.username + '_' + source_folder + '_' + obj.method.alias  # "{имя папки}_{метод создания}.tif"  # Файл результата
+            created = ndvi_composite(
+                input_files,
+                bands = [2, 3],    # каналы для расчета NDVI 2 - красный 3 - ближний ИК
+                output_path = outdir + output_file + ext
+            )
 #   *** Создание МНОГОВРЕМЕННОГО композита из нескольких разновременных снимков с различными методами агреации значений пикселей ***
         elif obj.method.alias == 'multitemp':
             agmet = obj.agregat # методы агрегации: 'median', 'mean', 'max', 'min'.
@@ -247,8 +255,9 @@ def resamling_files_as_first(input_files, resampl):
     return True
 
 
-
+#   **********************************************************************************
 #   *** Функция создания СИНТЕЗИРОВАННОГО композита из двух разновременных снимков ***
+#   **********************************************************************************
 def sintez_composite(input_files, bands1, bands2, out_path, driver_name='GTiff'):
     """
     Создаёт мультиканальный растр, объединяя указанные каналы из двух разных файлов.
@@ -315,7 +324,64 @@ def sintez_composite(input_files, bands1, bands2, out_path, driver_name='GTiff')
 
 
 
+#   *********************************************************************************************
+#   *** Создание композита по изменениям в растительности NDVI из двух разновременных снимков ***
+#   *********************************************************************************************
+def ndvi_composite(input_files, bands, output_path, driver_name='GTiff'):
+    # 1. Открытие разновременных снимков
+    ds1 = gdal.Open(input_files[0])
+    ds2 = gdal.Open(input_files[1])
+
+    bnum1 = ds1.RasterCount
+    bnum2 = ds2.RasterCount
+
+    if bnum1 < 3 and bnum2 < 3:
+        mad.message_user(req, f"Отсутствуют красный (3-й) и ближний ИК (4-й) каналы, ndvi будет расчитан по 1-му и 2-му каналам", level=messages.ERROR)
+        bands=[1, 2]
+
+    # Предполагаем, что каналы: 1 - Red, 2 - NIR (зависит от вашего композита)
+    red1, nir1 = ds1.GetRasterBand(bands[0]).ReadAsArray(), ds1.GetRasterBand(bands[1]).ReadAsArray()
+    red2, nir2 = ds2.GetRasterBand(bands[0]).ReadAsArray(), ds2.GetRasterBand(bands[1]).ReadAsArray()
+
+    # 2. Безопасное деление через NumPy (избегаем деления на ноль)
+    np.seterr(divide='ignore', invalid='ignore')
+    ndvi1 = np.where((nir1 + red1) > 0, (nir1 - red1) / (nir1 + red1), np.nan)
+    ndvi2 = np.where((nir2 + red2) > 0, (nir2 - red2) / (nir2 + red2), np.nan)
+
+    # 3. Выявление изменений
+    ndvi_diff = ndvi2 - ndvi1
+    ndvi_diff = np.nan_to_num(ndvi_diff, nan=0.0, posinf=0.0, neginf=0.0)
+
+    # 4. Сохранение результата (используем геопривязку от первого снимка)
+    driver = gdal.GetDriverByName(driver_name)
+    out_ds = driver.Create(output_path, ds1.RasterXSize, ds1.RasterYSize, 1, gdal.GDT_Byte) # gdal.GDT_Float32
+    out_ds.SetGeoTransform(ds1.GetGeoTransform())
+    out_ds.SetProjection(ds1.GetProjection())
+
+    ndvi_diff = normalize_to_255(ndvi_diff)
+
+    out_band = out_ds.GetRasterBand(1)
+    out_band.WriteArray(ndvi_diff)
+#    out_band.SetNoDataValue(np.nan)
+
+#    img_min = ndvi_diff.min()
+#    img_max = ndvi_diff.max()
+#    print(img_min, img_max)
+
+    out_band.FlushCache()
+    out_ds.FlushCache()
+
+    # Закрываем все датасеты
+    ds1 = None
+    ds2 = None
+    out_ds = None
+
+    return True
+
+
+#   ****************************************************************************************************************************************
 #   *** Функция создания МНОГОВРЕМЕННОГО композита из нескольких разновременных снимков с различными методами агреации значений пикселей ***
+#   ****************************************************************************************************************************************
 def multitemp_composite(input_files, output_file, method='median', block_size=512):
     """
     Создаёт мультивременной композит из списка входных растров.
@@ -397,7 +463,9 @@ def multitemp_composite(input_files, output_file, method='median', block_size=51
 
 
 
-#   *** Функция создания различных типов РАЗНОСТНОГО композита из нескольких разновременных снимков с различными методами разностей значений пикселей ***
+# *****************************************************************************************************************************************************
+# *** Функция создания различных типов РАЗНОСТНОГО композита из нескольких разновременных снимков с различными методами разностей значений пикселей ***
+# *****************************************************************************************************************************************************
 def differеnce_composite(input_files, output_path, bands=None, composite_type='range', block_size=512):
     """
     Расширенная версия с поддержкой многополосных файлов и разными типами композитов
@@ -516,7 +584,9 @@ def differеnce_composite(input_files, output_path, bands=None, composite_type='
 
 
 
-#   *** Функция создания композита по ПОРОГОВОМУ значению из нескольких разновременных снимков с различными методами агрегации значений пикселей ***
+# ************************************************************************************************************************************************
+# *** Функция создания композита по ПОРОГОВОМУ значению из нескольких разновременных снимков с различными методами агрегации значений пикселей ***
+# ************************************************************************************************************************************************
 def threshold_composite(input_files, output_path,
     bands=[1, 2, 3],  # какие каналы использовать (1-based индексы)
     threshold=50,     # порог для изменений
