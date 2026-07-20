@@ -294,7 +294,7 @@ def sintez_composite(input_files, bands1, bands2, out_path, driver_name='GTiff')
         src_band = ds1.GetRasterBand(band_idx)
         data = src_band.ReadAsArray()
         if data_type != gdal.GDT_Byte:
-            data= normalize_to_255(data)
+            data= normalize_image(data, range=[1, 255])
         out_band = out_ds.GetRasterBand(out_idx)
         out_band.WriteArray(data)
         # Копируем настройки NoData, если есть
@@ -308,7 +308,7 @@ def sintez_composite(input_files, bands1, bands2, out_path, driver_name='GTiff')
         src_band = ds2.GetRasterBand(band_idx)
         data = src_band.ReadAsArray()
         if data_type != gdal.GDT_Byte:
-            data= normalize_to_255(data)
+            data= normalize_image(data, range=[1, 255])
         out_band = out_ds.GetRasterBand(out_idx)
         out_band.WriteArray(data)
         src_nodata = src_band.GetNoDataValue()
@@ -324,9 +324,9 @@ def sintez_composite(input_files, bands1, bands2, out_path, driver_name='GTiff')
 
 
 
-#   *********************************************************************************************
-#   *** Создание композита по изменениям в растительности NDVI из двух разновременных снимков ***
-#   *********************************************************************************************
+#   ***********************************************************************************************
+#   *** Создание композита по изменениям в растительности (NDVI) из двух разновременных снимков ***
+#   ***********************************************************************************************
 def ndvi_composite(input_files, bands, output_path, driver_name='GTiff'):
     # 1. Открытие разновременных снимков
     ds1 = gdal.Open(input_files[0])
@@ -358,7 +358,7 @@ def ndvi_composite(input_files, bands, output_path, driver_name='GTiff'):
     out_ds.SetGeoTransform(ds1.GetGeoTransform())
     out_ds.SetProjection(ds1.GetProjection())
 
-    ndvi_diff = normalize_to_255(ndvi_diff)
+    ndvi_diff = normalize_image(ndvi_diff, range=[1, 255])
 
     out_band = out_ds.GetRasterBand(1)
     out_band.WriteArray(ndvi_diff)
@@ -735,7 +735,7 @@ def threshold_color_table(band, threshold):
     """
     # 1. Бинаризация данных через NumPy
     arr = band.ReadAsArray()
-#    arr = normalize_to_255(arr)
+#    arr = normalize_image(arr, range=[0,255])
 #    print(arr)
 
     if arr is None:
@@ -743,7 +743,6 @@ def threshold_color_table(band, threshold):
         return False
 
     if threshold == 0:
-#        threshold = round(mean_std_threshold(arr))
         method = 'mean_std'
         threshold = round(calculate_mean_threshold(arr, method=method))
     print(f"threshold: {method} {threshold}")
@@ -779,16 +778,6 @@ def threshold_color_table(band, threshold):
 
     return threshold
 
-@staticmethod
-def mean_std_threshold(data: np.ndarray, factor: float = 2.0) -> float:
-    """
-    Расчет порога по результату = среднее + factor * стандартное отклонение.
-    """
-    data = data[~np.isnan(data)]
-    if len(data) == 0:
-        return 0.0
-        
-    return float(np.mean(data) + factor * np.std(data))
 
 def calculate_mean_threshold(data: np.ndarray, n_factor: float = 2.0, method='mean_std'):
     # ========================================================================
@@ -896,7 +885,7 @@ def calculate_mean_threshold(data: np.ndarray, n_factor: float = 2.0, method='me
 
     return threshold
 
-def normalize_to_255(image):
+def normalize_image(image, range=[0, 255]):
     """
     Нормирует массив изображения в диапазон [0, 255] и приводит к типу uint8.
     GDT_Byte / GDT_UInt8 = 1 (8-bit unsigned integer)
@@ -919,7 +908,7 @@ def normalize_to_255(image):
         return np.zeros_like(image, dtype=np.uint8)
 
     # Линейное масштабирование
-    normalized = (img_float - img_min) * (255.0 / (img_max - img_min))
+    normalized = range[0] + (img_float - img_min) * (range[1] - range[0]) / (img_max - img_min) # 1-255
 
     # Округление до ближайшего целого и приведение к uint8
     return np.rint(normalized).astype(np.uint8)
