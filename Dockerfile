@@ -1,8 +1,8 @@
+# Базовый образ с miniforge3 (libmamba уже встроен по умолчанию)
+#FROM dockerhub.timeweb.cloud/continuumio/miniconda3:latest
+FROM dockerhub.timeweb.cloud/condaforge/miniforge3:latest
 
-# Базовый образ с conda
-FROM continuumio/miniconda3:latest
-
-# Установка системных пакетов: nginx, supervisor и библиотеки для PostgreSQL
+# Установка системных пакетов
 RUN apt-get update && apt-get install -y \
     nginx \
     supervisor \
@@ -11,20 +11,36 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Устанавливаем механизм разрешения зависимостей в менеджере пакетов Conda - новый libmamba (быстрый) старый classic (медленый)
-RUN conda install conda-libmamba-solver
-RUN conda config --set solver libmamba
-#RUN conda config --set solver classic
+# Настройка системного конфига Conda с зеркалами Tsinghua TUNA Китай
+RUN rm -f ~/.condarc /opt/conda/.condarc /etc/conda/.condarc && \
+    mkdir -p /etc/conda && \
+    cat <<EOF > /etc/conda/.condarc
+channels:
+  - conda-forge
+  - defaults
+show_channel_urls: true
+channel_priority: strict
+solver: libmamba
+use_jlap: false
+default_channels:
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main
+custom_channels:
+  conda-forge: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  pytorch: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  bioconda: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+EOF
 
-# Создание conda-окружения с Python 3.11
-RUN conda create -n multicomp python=3.11 -y && \
+# Создание окружения с Python 3.11
+RUN conda clean -all -y && \
+    conda create -n multicomp python=3.11 -y && \
     conda clean -afy
 
 # Активация окружения по умолчанию
 ENV PATH=/opt/conda/envs/multicomp/bin:$PATH
 
-# Установка всех необходимых Python‑пакетов через conda (включая gdal, numpy, psycopg2), где numpy==1.26.4 старая версия, которую поддерживают старые сервера в ЦОД РКС
-RUN conda install -n multicomp -c conda-forge \
+# Установка Python-пакетов (без флага -c conda-forge, чтобы работал /etc/conda/.condarc)
+RUN conda install -n multicomp \
     django \
     django-filer \
     django-mptt \
@@ -33,37 +49,25 @@ RUN conda install -n multicomp -c conda-forge \
     numpy==1.26.4 \
     psycopg2 \
     gunicorn \
+    typing_extensions \
     -y && \
     conda clean -afy
 
-# Рабочая директория внутри контейнера
 WORKDIR /app
-
-# Копирование исходного кода проекта
 COPY . /app/
-
 
 # Настройка nginx
 COPY nginx.conf /etc/nginx/sites-available/default
-RUN rm /etc/nginx/sites-enabled/default && \
+RUN rm -f /etc/nginx/sites-enabled/default && \
     ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/
 
 # Настройка supervisor
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Сбор статики Django (предполагается, что STATIC_ROOT настроен)
-#RUN python manage.py collectstatic --noinput
-# Выполнение миграций БД
-#RUN python manage.py migrate --fake-initial --noinput
-
-# Порт, который будет слушать nginx
 EXPOSE 80
 
-# Запуск supervisor (управляет gunicorn и nginx)
-#CMD ["supervisord", "-n"]
-
-# Копирование и подготовка entrypoint
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
+

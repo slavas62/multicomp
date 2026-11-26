@@ -8,39 +8,34 @@ window.addEventListener('load', function() {
 //                var selectedStatus = $('#id_method').val();
                 var selectedStatus = $('#id_method option:selected').text()
 
-                var agregatField = $('.field-agregat'); // Находим контейнер поля agregat (обычно div.field-имя_поля)
+                var autolevelsField = $('.field-autolevels').hide();
+                if (selectedStatus === 'Синтезированный композит') {
+                    autolevelsField.show();
+                }
+
+                var agregatField = $('.field-agregat').hide();     // Находим контейнер поля agregat (обычно div.field-имя_поля)
 //                if (selectedStatus === '5') {
                 if (selectedStatus === 'Многовременной композит') {
                     agregatField.show();
-                } else {
-                    agregatField.hide();
+                    autolevelsField.show();
                 }
 
-                var ctypesField = $('.field-ctypes'); // Находим контейнер поля ctypes (обычно div.field-имя_поля)
-                var bandsField = $('.field-bands');   // Находим контейнер поля bands (обычно div.field-имя_поля)
-//                if (selectedStatus === '6') {
+                var ctypesField = $('.field-ctypes').hide();       // Находим контейнер поля ctypes (обычно div.field-имя_поля)
+                var bandsField = $('.field-bands').hide();         // Находим контейнер поля bands (обычно div.field-имя_поля)
                 if (selectedStatus === 'Разностный композит') {
                     ctypesField.show();
                     bandsField.show();
-                } else {
-                    ctypesField.hide();
-                    bandsField.hide();
                 }
 
-				var metthreshField = $('.field-metthresh'); // Находим контейнер поля metthresh (обычно div.field-имя_поля)
-				var thresholdField = $('.field-threshold'); // Находим контейнер поля threshold (обычно div.field-имя_поля)
-				var bandsField = $('.field-bands');   // Находим контейнер поля bands (обычно div.field-имя_поля)
-				var autolevelsField = $('.field-autolevels');
+                var metthreshField = $('.field-metthresh').hide(); // Находим контейнер поля metthresh (обычно div.field-имя_поля)
+                var thresholdField = $('.field-threshold').hide(); // Находим контейнер поля threshold (обычно div.field-имя_поля)
                 if (selectedStatus === 'Пороговый композит') {
-					metthreshField.show();
-					thresholdField.show();
+                    metthreshField.show();
+                    thresholdField.show();
                     bandsField.show();
-					autolevelsField.hide();
-                } else {
-					metthreshField.hide();
-					thresholdField.hide();
-                    bandsField.hide();
-					autolevelsField.show();
+                }
+
+                if (selectedStatus === 'Композит по индексу NDVI') {
                 }
             }
 

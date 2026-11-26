@@ -127,7 +127,7 @@ class McbuilderConfig(AppConfig):
         result_file = output_file + ext # Имя файла композита с расширением
 
 #   *** 1. Улучшающая обработка результата (автоуровни) кроме порогового композита ***
-        if obj.autolevels and obj.method.alias != 'threshold':
+        if obj.autolevels and (obj.method.alias != 'threshold' and obj.method.alias != 'differеnce'):
             apply_autolevels_to_file(
                 outdir + output_file + ext,
                 outdir + output_file + '_ac' + ext,
@@ -908,7 +908,7 @@ def normalize_image(image, range=[0, 255]):
         return np.zeros_like(image, dtype=np.uint8)
 
     # Линейное масштабирование
-    normalized = range[0] + (img_float - img_min) * (range[1] - range[0]) / (img_max - img_min) # 1-255
+    normalized = range[0] + (img_float - img_min) * (range[1] - range[0]) / (img_max - img_min)
 
     # Округление до ближайшего целого и приведение к uint8
     return np.rint(normalized).astype(np.uint8)
